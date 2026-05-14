@@ -11,11 +11,12 @@ Shows your Epic Games library directly on Steam store pages so you never acciden
 
 ## Installation (Developer Mode)
 
-1. Open Chrome and go to `chrome://extensions/`
-2. Enable **Developer mode** (toggle in the top-right)
-3. Click **Load unpacked**
-4. Select the `epic-steam-extension` folder
-5. The extension icon appears in your toolbar ✅
+1. Clone or download this repo — you'll get a folder called `epic-steam-library-extension`
+2. Open Chrome and go to `chrome://extensions/`
+3. Enable **Developer mode** (toggle in the top-right)
+4. Click **Load unpacked**
+5. Select the `epic-steam-library-extension` folder
+6. The extension icon appears in your toolbar ✅
 
 ## How to Use
 
@@ -47,7 +48,7 @@ The extension normalizes titles (removes punctuation, symbols, extra spaces) and
 ## File Structure
 
 ```
-epic-steam-extension/
+epic-steam-library-extension/
 ├── manifest.json       # Extension config (Manifest V3)
 ├── background.js       # Service worker
 ├── content_epic.js     # Runs on epicgames.com — scans library
