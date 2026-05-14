@@ -1,6 +1,7 @@
-// popup.js v1.2.0
+// popup.js v1.3.0
 
 const STORAGE_KEY = "epicOwnedGames";
+const IGNORE_KEY  = "epicIgnoredGames";
 
 const btnScan      = document.getElementById("btn-scan");
 const btnClear     = document.getElementById("btn-clear");
@@ -10,7 +11,6 @@ const btnClearLog  = document.getElementById("btn-clear-log");
 const scanSpinner  = document.getElementById("scan-spinner");
 const scanLabel    = document.getElementById("scan-label");
 const statusEl     = document.getElementById("status");
-const statCount    = document.getElementById("stat-count");
 const statScan     = document.getElementById("stat-scan");
 const gamesList    = document.getElementById("games-list");
 const libCount     = document.getElementById("lib-count");
@@ -18,9 +18,10 @@ const libSearch    = document.getElementById("lib-search");
 const libAddInput  = document.getElementById("lib-add-input");
 const logContainer = document.getElementById("log-container");
 
-let allGames = [];
+let allGames   = [];
+let allIgnored = [];
 let storedLogs = [];
-let hasAuth = false;
+let hasAuth    = false;
 let initialLoad = true;
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
@@ -51,11 +52,12 @@ function timeAgo(ts) {
 
 // ── Library ───────────────────────────────────────────────────────────────
 function loadData() {
-  chrome.storage.local.get([STORAGE_KEY, "epicLastScan"], (result) => {
-    allGames = result[STORAGE_KEY] || [];
-    statCount.textContent = allGames.length;
+  chrome.storage.local.get([STORAGE_KEY, IGNORE_KEY, "epicLastScan"], (result) => {
+    allGames   = result[STORAGE_KEY] || [];
+    allIgnored = result[IGNORE_KEY]  || [];
     statScan.textContent = timeAgo(result.epicLastScan);
     renderLibrary();
+    renderIgnored();
     if (initialLoad) {
       initialLoad = false;
       if (allGames.length === 0) switchTab("scan");
@@ -87,22 +89,99 @@ function renderLibrary(filter = "") {
     name.className = "game-name";
     name.title = g;
     name.textContent = g;
-    const del = document.createElement("button");
-    del.className = "game-del";
-    del.title = "Remove";
-    del.textContent = "✕";
-    del.addEventListener("click", () => {
-      allGames = allGames.filter(x => x !== g);
-      chrome.storage.local.set({ [STORAGE_KEY]: allGames }, () => loadData());
-    });
-    item.append(dot, name, del);
+    const ign = document.createElement("button");
+    ign.className = "game-ignore";
+    ign.title = "Move to ignore list";
+    ign.textContent = "✕";
+    ign.addEventListener("click", () => ignoreGame(g));
+    item.append(dot, name, ign);
     gamesList.appendChild(item);
   });
 }
 
+function renderIgnored() {
+  const toggleRow = document.getElementById("ignored-toggle-row");
+  const section   = document.getElementById("ignored-section");
+  const countEl   = document.getElementById("ignored-count");
+  const chevron   = document.getElementById("ignored-chevron");
+  const list      = document.getElementById("ignored-list");
+
+  countEl.textContent = allIgnored.length;
+
+  if (allIgnored.length === 0) {
+    toggleRow.style.display = "none";
+    section.style.display   = "none";
+    return;
+  }
+  toggleRow.style.display = "block";
+
+  const sorted = allIgnored.slice().sort((a, b) => a.localeCompare(b));
+  list.innerHTML = "";
+  sorted.forEach(g => {
+    const item = document.createElement("div");
+    item.className = "game-item";
+    const dot = document.createElement("div");
+    dot.className = "game-dot-muted";
+    const name = document.createElement("span");
+    name.className = "game-name";
+    name.title = g;
+    name.textContent = g;
+    const restore = document.createElement("button");
+    restore.className = "game-restore";
+    restore.title = "Restore to library";
+    restore.textContent = "↩";
+    restore.addEventListener("click", () => restoreGame(g));
+    const del = document.createElement("button");
+    del.className = "game-del";
+    del.title = "Remove from ignore list";
+    del.textContent = "✕";
+    del.addEventListener("click", () => deleteFromIgnored(g));
+    item.append(dot, name, restore, del);
+    list.appendChild(item);
+  });
+}
+
+document.getElementById("btn-ignored-toggle").addEventListener("click", () => {
+  const section = document.getElementById("ignored-section");
+  const chevron = document.getElementById("ignored-chevron");
+  const open = section.style.display === "flex";
+  section.style.display = open ? "none" : "flex";
+  chevron.textContent   = open ? "▸" : "▾";
+});
+
+function ignoreGame(name) {
+  allGames = allGames.filter(x => x !== name);
+  if (!allIgnored.some(x => x.toLowerCase() === name.toLowerCase())) {
+    allIgnored.push(name);
+  }
+  chrome.storage.local.set({ [STORAGE_KEY]: allGames, [IGNORE_KEY]: allIgnored }, () => loadData());
+}
+
+function restoreGame(name) {
+  allIgnored = allIgnored.filter(x => x !== name);
+  if (!allGames.some(x => x.toLowerCase() === name.toLowerCase())) {
+    allGames.push(name);
+  }
+  chrome.storage.local.set({ [STORAGE_KEY]: allGames, [IGNORE_KEY]: allIgnored }, () => loadData());
+}
+
+function deleteFromIgnored(name) {
+  allIgnored = allIgnored.filter(x => x !== name);
+  chrome.storage.local.set({ [IGNORE_KEY]: allIgnored }, () => loadData());
+}
+
 function addGame() {
   const name = libAddInput.value.trim();
-  if (!name || allGames.includes(name)) { libAddInput.value = ""; return; }
+  if (!name) { libAddInput.value = ""; return; }
+  const lower = name.toLowerCase();
+  if (allGames.some(x => x.toLowerCase() === lower)) { libAddInput.value = ""; return; }
+  // If the game is currently ignored, restore it instead of adding a duplicate
+  if (allIgnored.some(x => x.toLowerCase() === lower)) {
+    allIgnored = allIgnored.filter(x => x.toLowerCase() !== lower);
+    allGames.push(name);
+    chrome.storage.local.set({ [STORAGE_KEY]: allGames, [IGNORE_KEY]: allIgnored }, () => { loadData(); libAddInput.value = ""; });
+    return;
+  }
   allGames.push(name);
   chrome.storage.local.set({ [STORAGE_KEY]: allGames }, () => { loadData(); libAddInput.value = ""; });
 }
@@ -171,7 +250,6 @@ chrome.runtime.sendMessage({ action: "checkAuth" }, (r) => setAuthState(!!r?.has
 
 btnScan.addEventListener("click", () => {
   if (!hasAuth) {
-    // Not logged in — open Epic Store and flip button to scan mode so user can scan after login
     chrome.tabs.create({ url: "https://store.epicgames.com" });
     setStatus("Sign in to Epic, then click Scan.", "warn");
     setAuthState(true);

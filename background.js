@@ -3,7 +3,7 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.2.19";
+const VERSION = "1.3.0";
 
 // ── Logger ────────────────────────────────────────────────────────────────
 const logs = [];
@@ -86,10 +86,14 @@ async function getEpicAuthFromCookies() {
 
 // ── Save games ────────────────────────────────────────────────────────────
 async function saveGames(newGames) {
-  const result = await chrome.storage.local.get([STORAGE_KEY]);
+  const result = await chrome.storage.local.get([STORAGE_KEY, "epicIgnoredGames"]);
   const existing = result[STORAGE_KEY] || [];
+  const ignored  = new Set((result.epicIgnoredGames || []).map(g => g.toLowerCase().trim()));
   const existingSet = new Set(existing.map(g => g.toLowerCase().trim()));
-  const toAdd = newGames.filter(g => !existingSet.has(g.toLowerCase().trim()));
+  const toAdd = newGames.filter(g => {
+    const key = g.toLowerCase().trim();
+    return !existingSet.has(key) && !ignored.has(key);
+  });
   const merged = [...existing, ...toAdd];
   await chrome.storage.local.set({ [STORAGE_KEY]: merged, epicLastScan: Date.now() });
   return { total: merged.length, added: toAdd.length };

@@ -62,11 +62,21 @@ epic-steam-library-extension/
 └── README.md
 ```
 
+## Managing your library
+
+The scan reads Epic's API and **may include games you don't fully own** — DLC routes, cross-compatible content, or internal catalog entries you can't actually play as standalone games. It may also **miss some titles** that Epic's API doesn't expose.
+
+You can correct the list at any time from the **Library tab**:
+
+- **Add** games the scan missed using the "Add game manually…" field
+- **Ignore** false positives — click ✕ next to a game to move it to the ignore list. Ignored games are skipped on future scans and won't reappear automatically.
+- **Restore** an ignored game back to your library from the Ignored section, or delete it from the ignore list entirely to let the next scan decide.
+
 ## Limitations
 
-- Epic's library page uses dynamic rendering; scroll to load all titles before scanning
-- Free games claimed from Epic (weekly free games) appear in your library and will be detected
+- Free games claimed from Epic (weekly giveaways) appear in your library and will be detected
 - Games with very different names on Epic vs Steam may not be matched (e.g. regional title differences)
+- Some games in Epic's API may be DLC entitlements or compatibility records rather than owned base games
 
 ## Privacy
 
