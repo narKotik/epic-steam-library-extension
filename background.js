@@ -3,7 +3,7 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.2.6";
+const VERSION = "1.2.7";
 
 // ── Logger ────────────────────────────────────────────────────────────────
 const logs = [];
@@ -255,13 +255,27 @@ async function fetchViaLibraryAPI(authToken) {
 
   info(`Library API total records (${page} page${page > 1 ? "s" : ""})`, allRecords.length);
 
+  // Log a sample record so we can see the actual shape
+  if (allRecords.length > 0) info("Library API sample record", allRecords[0]);
+
   // sandboxName is the human-readable game title (e.g. "Borderlands 2").
   // appName is an internal identifier (e.g. "DodoDLC1Anemone") — not useful as a display title.
-  const titles = allRecords
-    .map(r => r.sandboxName || r.catalogItem?.title || r.title)
-    .filter(t => t && t.length > 1 && !t.match(/^[a-f0-9-]{32,}$/i));
-  info(`Library API OK — ${titles.length} titles`);
-  return titles;
+  const withSandbox    = allRecords.filter(r => r.sandboxName);
+  const withCatTitle   = allRecords.filter(r => !r.sandboxName && r.catalogItem?.title);
+  const withTitle      = allRecords.filter(r => !r.sandboxName && !r.catalogItem?.title && r.title);
+  const noTitle        = allRecords.filter(r => !r.sandboxName && !r.catalogItem?.title && !r.title);
+  info("Library API title field breakdown", `sandboxName:${withSandbox.length} catalogItem.title:${withCatTitle.length} title:${withTitle.length} none:${noTitle.length}`);
+  if (noTitle.length > 0) info("Library API no-title sample", noTitle[0]);
+
+  const rawTitles = allRecords.map(r => r.sandboxName || r.catalogItem?.title || r.title);
+  const uuidFiltered = rawTitles.filter(t => t && t.length > 1 && t.match(/^[a-f0-9-]{32,}$/i));
+  if (uuidFiltered.length > 0) info("Library API UUID-filtered titles", uuidFiltered.slice(0, 5));
+
+  const titles = rawTitles.filter(t => t && t.length > 1 && !t.match(/^[a-f0-9-]{32,}$/i));
+  const uniqueTitles = [...new Set(titles)];
+  info(`Library API after dedup: ${titles.length} titles → ${uniqueTitles.length} unique`);
+  info(`Library API OK — ${uniqueTitles.length} titles`);
+  return uniqueTitles;
 }
 
 // ── Method 4: Epic account owned items (newer endpoint) ───────────────────
