@@ -69,8 +69,27 @@ The scan reads Epic's API and **may include games you don't fully own** — DLC 
 You can correct the list at any time from the **Library tab**:
 
 - **Add** games the scan missed using the "Add game manually…" field
-- **Ignore** false positives — click ✕ next to a game to move it to the ignore list. Ignored games are skipped on future scans and won't reappear automatically.
-- **Restore** an ignored game back to your library from the Ignored section, or delete it from the ignore list entirely to let the next scan decide.
+- **Ignore** false positives — click ✕ next to a game to move it to the ignore list
+- **Restore** an ignored game back to your library, or permanently delete it from the ignore list
+
+### Ignore list
+
+The ignore list lets you clean up false positives without losing them permanently. Ignored games:
+- are hidden from your main library
+- are skipped on all future scans (won't reappear automatically)
+- can be restored to your library at any time via the ↩ button in the Ignored section
+- can be permanently removed from the ignore list via ✕ — after that, the next scan will treat them like new games again
+
+## Troubleshooting
+
+If a scan returns 0 games or fewer games than expected, enable **Debug logs** to see exactly what's happening:
+
+1. Open the extension popup
+2. At the bottom, check the **Debug logs** checkbox
+3. Run the scan again
+4. The **Logs** tab will appear — open it to see detailed output
+
+The logs show which API method was used, how many records were returned, and any errors encountered. You can copy the full log with the **Copy** button to share when reporting an issue.
 
 ## Limitations
 
