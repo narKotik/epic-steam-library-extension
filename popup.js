@@ -16,7 +16,8 @@ const gamesList    = document.getElementById("games-list");
 const libCount     = document.getElementById("lib-count");
 const libSearch    = document.getElementById("lib-search");
 const libAddInput  = document.getElementById("lib-add-input");
-const logContainer = document.getElementById("log-container");
+const logContainer  = document.getElementById("log-container");
+const chkDebugLogs  = document.getElementById("chk-debug-logs");
 
 let allGames   = [];
 let allIgnored = [];
@@ -56,7 +57,7 @@ function loadData() {
     allGames   = result[STORAGE_KEY] || [];
     allIgnored = result[IGNORE_KEY]  || [];
     statScan.textContent = timeAgo(result.epicLastScan);
-    renderLibrary();
+    renderLibrary(libSearch.value);
     renderIgnored();
     if (initialLoad) {
       initialLoad = false;
@@ -303,12 +304,23 @@ btnScan.addEventListener("click", () => {
   });
 });
 
-// ── Debug logs toggle (footer link) ───────────────────────────────────────
-document.getElementById("btn-show-logs").addEventListener("click", (e) => {
-  e.preventDefault();
-  const btn = document.getElementById("tab-btn-logs");
-  btn.style.display = "";
-  btn.click();
+// ── Debug logs toggle (footer checkbox) ───────────────────────────────────
+function applyDebugState(enabled) {
+  const logsTabBtn = document.getElementById("tab-btn-logs");
+  logsTabBtn.style.display = enabled ? "" : "none";
+  if (!enabled && logsTabBtn.classList.contains("active")) switchTab("library");
+}
+
+chrome.storage.local.get("epicDebugLogs", (r) => {
+  const enabled = !!r.epicDebugLogs;
+  chkDebugLogs.checked = enabled;
+  applyDebugState(enabled);
+});
+
+chkDebugLogs.addEventListener("change", () => {
+  const enabled = chkDebugLogs.checked;
+  chrome.storage.local.set({ epicDebugLogs: enabled });
+  applyDebugState(enabled);
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────

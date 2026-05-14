@@ -114,7 +114,8 @@
 
     .footer { border-top:1px solid var(--border); padding:7px 14px; font-size:10px; color:var(--muted); text-align:center; }
     .footer a { color:var(--epic); text-decoration:none; }
-    .footer a#btn-show-logs { color:var(--muted); font-size:9px; }
+    .debug-toggle { cursor:pointer; color:var(--muted); font-size:9px; }
+    .debug-toggle input { accent-color:var(--epic); cursor:pointer; vertical-align:middle; margin-right:2px; }
   </style>
 </head>
 <body>
@@ -127,7 +128,7 @@
     <div class="header-name">Epic Library on Steam</div>
     <div class="header-sub">Cross-library ownership checker</div>
   </div>
-  <div class="header-ver">v1.3.1</div>
+  <div class="header-ver">v1.3.2</div>
 </div>
 
 <div class="tabs">
@@ -196,7 +197,7 @@
 </div>
 
 <div class="footer">
-  Matching by title similarity &nbsp;·&nbsp; <a href="https://store.epicgames.com" target="_blank">Epic Store ↗</a> &nbsp;·&nbsp; <a href="#" id="btn-show-logs">logs</a>
+  Matching by title similarity &nbsp;·&nbsp; <a href="https://store.epicgames.com" target="_blank">Epic Store ↗</a> &nbsp;·&nbsp; <label class="debug-toggle"><input type="checkbox" id="chk-debug-logs">Debug logs</label>
 </div>
 
 <script src="popup.js"></script>

@@ -3,8 +3,8 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.3.1";
-const DEBUG = false; // set true to enable full title-list dumps in the Logs tab
+const VERSION = "1.3.2";
+let DEBUG = false; // set true (or via Debug logs checkbox in popup) to enable full title-list dumps
 
 // ── Logger ────────────────────────────────────────────────────────────────
 const logs = [];
@@ -406,6 +406,8 @@ async function fetchViaOwnedItems(authToken, accountIdFromPage) {
 // ── Main scan ─────────────────────────────────────────────────────────────
 async function doScan(authFromPage, accountIdFromPage) {
   logs.length = 0;
+  const { epicDebugLogs } = await chrome.storage.local.get("epicDebugLogs");
+  DEBUG = !!epicDebugLogs;
   info(`ELS v${VERSION} background scan started`);
   info("Auth token from page?", authFromPage ? `Yes (${authFromPage.length} chars)` : "No");
   info("Account ID from page?", accountIdFromPage ? accountIdFromPage.slice(0, 8) + "..." : "No");
