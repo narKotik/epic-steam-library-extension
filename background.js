@@ -3,7 +3,7 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.2.5";
+const VERSION = "1.2.6";
 
 // ── Logger ────────────────────────────────────────────────────────────────
 const logs = [];
@@ -208,10 +208,12 @@ async function fetchViaLibraryAPI(authToken) {
   let cursor = null;
   let page = 0;
 
-  do {
+  while (true) {
     const url = new URL(BASE);
     url.searchParams.set("includeMetadata", "true");
+    url.searchParams.set("pageSize", "1000"); // request max per page; API will cap at its own limit
     if (cursor) url.searchParams.set("cursor", cursor);
+    else if (page > 0) url.searchParams.set("start", allRecords.length); // offset fallback
 
     const resp = await fetch(url.toString(), { headers: authHeaders(authToken) });
     info(`Library API HTTP status (page ${page})`, resp.status);
@@ -224,18 +226,32 @@ async function fetchViaLibraryAPI(authToken) {
     }
 
     const json = await resp.json();
-    if (page === 0) {
-      info("Library API response keys", Object.keys(json));
-      info("Library API responseMetadata", json?.responseMetadata);
-    }
+    const meta = json?.responseMetadata;
+    if (page === 0) info("Library API responseMetadata", meta);
+
     const records = json?.records || json?.data || (Array.isArray(json) ? json : null);
     if (!records) throw new Error("Unexpected shape");
 
+    info(`Library API page ${page}: ${records.length} records (total so far: ${allRecords.length + records.length})`);
     allRecords.push(...records);
-    cursor = json?.responseMetadata?.nextCursor || null;
+
+    if (records.length === 0) break;
+
+    // Cursor-based: keep going if a next cursor exists under any known field name
+    cursor = meta?.nextCursor || meta?.cursor || meta?.nextToken || null;
+    if (cursor) { page++; continue; }
+
+    // Offset-based: keep going if total count says there's more
+    const total = meta?.total ?? meta?.totalCount ?? null;
+    if (total !== null && allRecords.length < total) { page++; continue; }
+
+    // Last resort: if the page was full we might be mid-stream; stop if it looks partial
+    if (records.length < 100) break;
+
+    // Got a full page with no cursor and no total — try one more in case API is paginating silently
     page++;
-    if (page > 50) { warn("Library API pagination safety limit reached"); break; }
-  } while (cursor);
+    if (page > 100) { warn("Library API pagination safety limit reached"); break; }
+  }
 
   info(`Library API total records (${page} page${page > 1 ? "s" : ""})`, allRecords.length);
 
