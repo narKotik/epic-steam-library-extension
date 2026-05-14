@@ -127,31 +127,13 @@
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-tab="scan">🎮 Scan</div>
-  <div class="tab" data-tab="library">📚 Library</div>
+  <div class="tab active" data-tab="library">📚 Library</div>
+  <div class="tab" data-tab="scan">🎮 Scan</div>
   <div class="tab" data-tab="logs">🔍 Logs</div>
 </div>
 
-<!-- SCAN TAB -->
-<div class="panel active" id="tab-scan">
-  <div class="step">
-    <div class="step-header"><div class="step-num">1</div><div class="step-title">Open Epic & Log In</div></div>
-    <div class="step-desc">Go to any Epic Games Store page while signed into your account.</div>
-    <button class="btn btn-secondary" id="btn-open-epic">🔗 Open Epic Store</button>
-  </div>
-  <div class="step">
-    <div class="step-header"><div class="step-num">2</div><div class="step-title">Scan Your Library</div></div>
-    <div class="step-desc">Fetches your owned games via Epic's API. If it fails, check the Logs tab.</div>
-    <button class="btn btn-primary" id="btn-scan">
-      <div class="spinner" id="scan-spinner"></div>
-      <span id="scan-label">🎮 Scan Epic Library</span>
-    </button>
-  </div>
-  <div id="status"></div>
-</div>
-
 <!-- LIBRARY TAB -->
-<div class="panel" id="tab-library">
+<div class="panel active" id="tab-library">
   <div class="lib-toolbar">
     <input class="lib-search" id="lib-search" placeholder="Search games…" autocomplete="off" />
   </div>
@@ -171,6 +153,24 @@
     <span class="lib-count" id="lib-count">0 games</span>
     <button class="btn-clear-lib" id="btn-clear">Clear all</button>
   </div>
+</div>
+
+<!-- SCAN TAB -->
+<div class="panel" id="tab-scan">
+  <div class="step">
+    <div class="step-header"><div class="step-num">1</div><div class="step-title">Open Epic & Log In</div></div>
+    <div class="step-desc">Go to any Epic Games Store page while signed into your account.</div>
+    <button class="btn btn-secondary" id="btn-open-epic">🔗 Open Epic Store</button>
+  </div>
+  <div class="step">
+    <div class="step-header"><div class="step-num">2</div><div class="step-title">Scan Your Library</div></div>
+    <div class="step-desc">Fetches your owned games via Epic's API. If it fails, check the Logs tab.</div>
+    <button class="btn btn-primary" id="btn-scan">
+      <div class="spinner" id="scan-spinner"></div>
+      <span id="scan-label">🎮 Scan Epic Library</span>
+    </button>
+  </div>
+  <div id="status"></div>
 </div>
 
 <!-- LOGS TAB -->

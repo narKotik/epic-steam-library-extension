@@ -195,8 +195,9 @@ btnScan.addEventListener("click", async () => {
       switchTab("logs");
     } else {
       setStatus(`✅ ${response.total} games saved (${response.added} new) via ${response.method}`, "ok");
+      loadData();
+      switchTab("library");
     }
-    loadData();
   });
 });
 
