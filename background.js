@@ -3,7 +3,7 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.2.18";
+const VERSION = "1.2.19";
 
 // ── Logger ────────────────────────────────────────────────────────────────
 const logs = [];

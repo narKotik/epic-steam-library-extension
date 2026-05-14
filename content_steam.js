@@ -24,20 +24,37 @@
   // Keep words >2 chars OR pure numbers — numbers distinguish sequels ("Fallout 3" vs "Fallout 1").
   function sigWords(s) { return s.split(" ").filter(w => w.length > 2 || /^\d+$/.test(w)); }
 
+  // Rank by quality: exact wins over partial wins over fuzzy.
+  // Scan ALL titles so a later exact match beats an earlier partial/fuzzy hit.
   function isMatch(steamTitle, epicTitles) {
     const sn = normalize(steamTitle);
     const sWords = new Set(sigWords(sn));
+    const RANK = { exact: 3, partial: 2, fuzzy: 1 };
+    let best = null;
+
     for (const et of epicTitles) {
       const en = normalize(et);
-      if (sn === en) return { match: true, epicTitle: et, confidence: "exact" };
-      if (sn.includes(en) || en.includes(sn)) return { match: true, epicTitle: et, confidence: "partial" };
-      const eWords = sigWords(en);
-      if (eWords.length === 0) continue;
-      const overlap = eWords.filter(w => sWords.has(w)).length;
-      const score = overlap / Math.max(sWords.size, eWords.length);
-      if (score >= 0.75) return { match: true, epicTitle: et, confidence: "fuzzy" };
+      let confidence = null;
+
+      if (sn === en) {
+        confidence = "exact";
+      } else if (sn.includes(en) || en.includes(sn)) {
+        confidence = "partial";
+      } else {
+        const eWords = sigWords(en);
+        if (eWords.length > 0) {
+          const overlap = eWords.filter(w => sWords.has(w)).length;
+          if (overlap / Math.max(sWords.size, eWords.length) >= 0.75) confidence = "fuzzy";
+        }
+      }
+
+      if (confidence && (!best || RANK[confidence] > RANK[best.confidence])) {
+        best = { match: true, epicTitle: et, confidence };
+        if (confidence === "exact") break; // can't do better
+      }
     }
-    return { match: false };
+
+    return best || { match: false };
   }
 
   // ── Get current Steam game title ──────────────────────────────────────────
