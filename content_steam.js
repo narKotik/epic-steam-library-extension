@@ -21,19 +21,19 @@
   }
 
   // ── Check similarity between two normalized strings ───────────────────────
+  // Keep words >2 chars OR pure numbers — numbers distinguish sequels ("Fallout 3" vs "Fallout 1").
+  function sigWords(s) { return s.split(" ").filter(w => w.length > 2 || /^\d+$/.test(w)); }
+
   function isMatch(steamTitle, epicTitles) {
     const sn = normalize(steamTitle);
+    const sWords = new Set(sigWords(sn));
     for (const et of epicTitles) {
       const en = normalize(et);
-      // Exact match
       if (sn === en) return { match: true, epicTitle: et, confidence: "exact" };
-      // One contains the other (handles subtitle differences)
       if (sn.includes(en) || en.includes(sn)) return { match: true, epicTitle: et, confidence: "partial" };
-      // Word-overlap score
-      const sWords = new Set(sn.split(" ").filter((w) => w.length > 2));
-      const eWords = en.split(" ").filter((w) => w.length > 2);
+      const eWords = sigWords(en);
       if (eWords.length === 0) continue;
-      const overlap = eWords.filter((w) => sWords.has(w)).length;
+      const overlap = eWords.filter(w => sWords.has(w)).length;
       const score = overlap / Math.max(sWords.size, eWords.length);
       if (score >= 0.75) return { match: true, epicTitle: et, confidence: "fuzzy" };
     }
