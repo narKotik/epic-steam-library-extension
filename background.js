@@ -3,7 +3,8 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.3.0";
+const VERSION = "1.3.1";
+const DEBUG = false; // set true to enable full title-list dumps in the Logs tab
 
 // ── Logger ────────────────────────────────────────────────────────────────
 const logs = [];
@@ -21,8 +22,9 @@ function log(level, msg, data) {
 const info  = (m, d) => log("info",  m, d);
 const warn  = (m, d) => log("warn",  m, d);
 const error = (m, d) => log("error", m, d);
-// logDump: stores full data without the 400-char truncation, for copying full title lists
+// logDump: full-data dump for diagnosis — only runs when DEBUG = true
 function logDump(msg, data) {
+  if (!DEBUG) return;
   logs.push({ time: new Date().toISOString().slice(11, 23), level: "info", msg, data: JSON.stringify(data) });
 }
 

@@ -303,6 +303,14 @@ btnScan.addEventListener("click", () => {
   });
 });
 
+// ── Debug logs toggle (footer link) ───────────────────────────────────────
+document.getElementById("btn-show-logs").addEventListener("click", (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("tab-btn-logs");
+  btn.style.display = "";
+  btn.click();
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────
 loadData();
 setInterval(() => {

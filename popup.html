@@ -114,6 +114,7 @@
 
     .footer { border-top:1px solid var(--border); padding:7px 14px; font-size:10px; color:var(--muted); text-align:center; }
     .footer a { color:var(--epic); text-decoration:none; }
+    .footer a#btn-show-logs { color:var(--muted); font-size:9px; }
   </style>
 </head>
 <body>
@@ -126,13 +127,13 @@
     <div class="header-name">Epic Library on Steam</div>
     <div class="header-sub">Cross-library ownership checker</div>
   </div>
-  <div class="header-ver">v1.3.0</div>
+  <div class="header-ver">v1.3.1</div>
 </div>
 
 <div class="tabs">
   <div class="tab active" data-tab="library">📚 Library</div>
   <div class="tab" data-tab="scan">🎮 Scan</div>
-  <div class="tab" data-tab="logs">🔍 Logs</div>
+  <div class="tab" data-tab="logs" id="tab-btn-logs" style="display:none;">🔍 Logs</div>
 </div>
 
 <!-- LIBRARY TAB -->
@@ -195,7 +196,7 @@
 </div>
 
 <div class="footer">
-  Matching by title similarity &nbsp;·&nbsp; <a href="https://store.epicgames.com" target="_blank">Epic Store ↗</a>
+  Matching by title similarity &nbsp;·&nbsp; <a href="https://store.epicgames.com" target="_blank">Epic Store ↗</a> &nbsp;·&nbsp; <a href="#" id="btn-show-logs">logs</a>
 </div>
 
 <script src="popup.js"></script>
