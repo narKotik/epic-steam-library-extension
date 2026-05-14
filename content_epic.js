@@ -1,4 +1,4 @@
-// content_epic.js v1.2.8
+// content_epic.js v1.2.9
 // Runs on epicgames.com pages.
 // Its ONLY job: extract auth tokens/account ID from the page and send to background.
 // All network calls happen in background.js (no CORS there).
@@ -133,5 +133,5 @@
     }
   });
 
-  console.log("[ELS] v1.2.8 content script ready on", location.hostname);
+  console.log("[ELS] v1.2.9 content script ready on", location.hostname);
 })();

@@ -3,7 +3,7 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.2.8";
+const VERSION = "1.2.9";
 
 // ── Logger ────────────────────────────────────────────────────────────────
 const logs = [];
@@ -255,23 +255,24 @@ async function fetchViaLibraryAPI(authToken) {
 
   info(`Library API total records (${page} page${page > 1 ? "s" : ""})`, allRecords.length);
 
-  // sandboxName is usually the human-readable product title ("Borderlands 2"), but can also
-  // be a UUID/hash for some titles. If it looks like a UUID, fall through to catalogItem.title.
   const isUUID = t => !t || /^[a-f0-9-]{32,}$/i.test(t);
 
-  const rawTitles = allRecords.map(r => {
-    const sandbox = isUUID(r.sandboxName) ? null : r.sandboxName;
-    const catTitle = isUUID(r.catalogItem?.title) ? null : r.catalogItem?.title;
-    const rootTitle = isUUID(r.title) ? null : r.title;
-    return sandbox || catTitle || rootTitle || null;
+  // Collect both sandboxName (parent game name, groups DLC) and catalogItem.title
+  // (specific item name, captures edition titles like "GOTY Edition" that differ from parent).
+  const rawTitles = allRecords.flatMap(r => {
+    const sandbox  = isUUID(r.sandboxName)        ? null : r.sandboxName;
+    const catTitle = isUUID(r.catalogItem?.title)  ? null : r.catalogItem?.title;
+    const root     = isUUID(r.title)              ? null : r.title;
+    const seen = new Set();
+    const out = [];
+    for (const t of [sandbox, catTitle, root]) {
+      if (t && t.length > 1 && !seen.has(t)) { seen.add(t); out.push(t); }
+    }
+    return out;
   });
 
-  const dropped = rawTitles.filter(t => !t).length;
-  if (dropped > 0) info(`Library API: ${dropped} records with no usable title (all UUID/missing)`);
-
-  const titles = rawTitles.filter(t => t && t.length > 1);
-  const uniqueTitles = [...new Set(titles)];
-  info(`Library API after dedup: ${titles.length} titles → ${uniqueTitles.length} unique`);
+  const uniqueTitles = [...new Set(rawTitles)];
+  info(`Library API after dedup: ${rawTitles.length} raw → ${uniqueTitles.length} unique`);
   info(`Library API OK — ${uniqueTitles.length} titles`);
   return uniqueTitles;
 }
