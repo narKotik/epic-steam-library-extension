@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Epic Library on Steam</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --epic: #0078f2; --epic-dark: #005bbf; --bg: #0d1117; --surface: #161b22;
+      --surface2: #1f2937; --border: #30363d; --text: #e6edf3; --muted: #6e7681;
+      --green: #3fb950; --orange: #d29922; --red: #f85149;
+      --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-display: "Segoe UI Variable Display", "Segoe UI", var(--font-ui);
+    }
+    body { width: 360px; background: var(--bg); color: var(--text); font-family: var(--font-ui); font-size: 13px; user-select: none; }
+
+    /* Header */
+    .header { background: linear-gradient(135deg,#0d1b2a,#0f2034); border-bottom: 1px solid var(--border); padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+    .header-logo { width: 32px; height: 32px; background: var(--epic); border-radius: 7px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0,120,242,.4); flex-shrink: 0; }
+    .header-name { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: #fff; line-height: 1; }
+    .header-sub { font-size: 10px; color: var(--muted); margin-top: 1px; }
+    .header-ver { margin-left: auto; font-size: 10px; color: var(--muted); background: var(--surface2); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
+
+    /* Stats */
+    .stats { display: flex; gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); }
+    .stat { flex: 1; background: var(--surface); padding: 8px 12px; }
+    .stat-value { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--epic); line-height: 1; }
+    .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+    /* Tabs */
+    .tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); }
+    .tab { flex: 1; padding: 9px 4px; text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; letter-spacing: .03em; text-transform: uppercase; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--epic); border-bottom-color: var(--epic); }
+
+    /* Panels */
+    .panel { display: none; padding: 14px 14px; flex-direction: column; gap: 10px; }
+    .panel.active { display: flex; }
+
+    /* Scan panel */
+    .step { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 12px 13px; display: flex; flex-direction: column; gap: 6px; }
+    .step-header { display: flex; align-items: center; gap: 8px; }
+    .step-num { width: 19px; height: 19px; background: var(--epic); border-radius: 50%; font-family:var(--font-display); font-weight:700; font-size:11px; color:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .step-title { font-weight: 600; font-size: 13px; }
+    .step-desc { font-size: 11px; color: var(--muted); line-height: 1.5; padding-left: 27px; }
+    .btn { display:flex; align-items:center; justify-content:center; gap:6px; padding:9px 14px; border-radius:7px; border:none; font-family:var(--font-ui); font-size:12px; font-weight:600; cursor:pointer; transition:all .18s; width:100%; }
+    .btn-primary { background:var(--epic); color:#fff; box-shadow:0 2px 8px rgba(0,120,242,.3); }
+    .btn-primary:hover { background:var(--epic-dark); }
+    .btn-primary:active { transform:scale(.98); }
+    .btn-secondary { background:var(--surface2); color:#c6d4df; border:1px solid var(--border); }
+    .btn-secondary:hover { background:#263142; border-color:#4a5568; }
+    .btn:disabled { opacity:.45; cursor:not-allowed; }
+    #status { font-size:11px; min-height:14px; text-align:center; color:var(--muted); transition:color .2s; }
+    #status.ok { color:var(--green); } #status.warn { color:var(--orange); } #status.err { color:var(--red); }
+    .spinner { width:11px; height:11px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; display:none; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* Library panel */
+    .lib-toolbar { display:flex; align-items:center; gap:6px; }
+    .lib-search { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:6px 9px; color:var(--text); font-size:12px; font-family:inherit; outline:none; }
+    .lib-search::placeholder { color:var(--muted); }
+    .lib-search:focus { border-color: var(--epic); }
+    .lib-add-row { display:flex; gap:6px; }
+    .lib-add-input { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:7px 9px; color:var(--text); font-size:12px; font-family:inherit; outline:none; }
+    .lib-add-input::placeholder { color:var(--muted); }
+    .lib-add-input:focus { border-color: var(--epic); }
+    .btn-add { padding:7px 12px; border-radius:6px; background:var(--epic); color:#fff; border:none; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
+    .btn-add:hover { background:var(--epic-dark); }
+    .games-list-wrap { max-height: 230px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+    .games-list-wrap::-webkit-scrollbar { width:4px; } .games-list-wrap::-webkit-scrollbar-track { background:transparent; } .games-list-wrap::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+    .game-item { display:flex; align-items:center; gap:8px; padding:6px 10px; border-bottom:1px solid rgba(48,54,61,.5); }
+    .game-item:last-child { border-bottom:none; }
+    .game-item:hover { background:var(--surface2); }
+    .game-dot { width:5px; height:5px; border-radius:50%; background:var(--epic); flex-shrink:0; }
+    .game-name { flex:1; font-size:11px; color:#8b949e; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .game-item:hover .game-name { color:var(--text); }
+    .game-del { color:var(--muted); font-size:11px; cursor:pointer; padding:2px 4px; border-radius:3px; border:none; background:none; line-height:1; }
+    .game-del:hover { color:var(--red); background:rgba(248,81,73,.1); }
+    .empty-state { padding:20px; text-align:center; font-size:11px; color:var(--muted); }
+    .lib-footer { display:flex; align-items:center; justify-content:space-between; }
+    .lib-count { font-size:10px; color:var(--muted); }
+    .btn-clear-lib { font-size:10px; color:var(--red); background:none; border:none; cursor:pointer; font-family:inherit; padding:2px 4px; border-radius:4px; }
+    .btn-clear-lib:hover { background:rgba(248,81,73,.12); }
+    .clear-confirm { display:none; align-items:center; gap:8px; padding:7px 10px; background:rgba(248,81,73,.08); border:1px solid rgba(248,81,73,.25); border-radius:6px; font-size:11px; color:var(--red); }
+    .clear-confirm.visible { display:flex; }
+    .clear-confirm span { flex:1; }
+    .btn-confirm-yes { padding:3px 10px; border-radius:4px; background:var(--red); color:#fff; border:none; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; }
+    .btn-confirm-yes:hover { background:#d63b33; }
+    .btn-confirm-no  { padding:3px 10px; border-radius:4px; background:var(--surface2); color:var(--muted); border:1px solid var(--border); font-size:11px; cursor:pointer; font-family:inherit; }
+    .btn-confirm-no:hover { color:var(--text); }
+
+    /* Logs panel */
+    .log-toolbar { display:flex; gap:6px; align-items:center; }
+    .btn-copy-log { padding:5px 10px; border-radius:5px; background:var(--surface2); color:var(--text); border:1px solid var(--border); font-size:11px; cursor:pointer; font-family:inherit; }
+    .btn-copy-log:hover { border-color:#4a5568; }
+    .btn-clear-log { padding:5px 10px; border-radius:5px; background:none; color:var(--muted); border:1px solid var(--border); font-size:11px; cursor:pointer; font-family:inherit; }
+    .btn-clear-log:hover { color:var(--red); }
+    .log-empty { font-size:11px; color:var(--muted); text-align:center; padding:20px; }
+    .log-box { max-height:260px; overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:6px; display:flex; flex-direction:column; gap:2px; }
+    .log-box::-webkit-scrollbar { width:4px; } .log-box::-webkit-scrollbar-track { background:transparent; } .log-box::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+    .log-entry { font-size:10px; font-family:'Courier New',monospace; padding:3px 6px; border-radius:4px; line-height:1.4; word-break:break-all; }
+    .log-entry.info  { color:#8b949e; }
+    .log-entry.warn  { color:var(--orange); background:rgba(210,153,34,.06); }
+    .log-entry.error { color:var(--red);    background:rgba(248,81,73,.07); }
+    .log-time { color:var(--muted); margin-right:5px; }
+
+    .footer { border-top:1px solid var(--border); padding:7px 14px; font-size:10px; color:var(--muted); text-align:center; }
+    .footer a { color:var(--epic); text-decoration:none; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">
+    <svg width="20" height="20" viewBox="0 0 32 32" fill="none"><path d="M10 11h12v2.5H13v2h8v2.5h-8v2H22V22.5H10V11z" fill="white"/></svg>
+  </div>
+  <div>
+    <div class="header-name">Epic Library on Steam</div>
+    <div class="header-sub">Cross-library ownership checker</div>
+  </div>
+  <div class="header-ver">v1.2.5</div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-value" id="stat-count">0</div><div class="stat-label">Games saved</div></div>
+  <div class="stat"><div class="stat-value" id="stat-scan">—</div><div class="stat-label">Last scan</div></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="scan">🎮 Scan</div>
+  <div class="tab" data-tab="library">📚 Library</div>
+  <div class="tab" data-tab="logs">🔍 Logs</div>
+</div>
+
+<!-- SCAN TAB -->
+<div class="panel active" id="tab-scan">
+  <div class="step">
+    <div class="step-header"><div class="step-num">1</div><div class="step-title">Open Epic & Log In</div></div>
+    <div class="step-desc">Go to any Epic Games Store page while signed into your account.</div>
+    <button class="btn btn-secondary" id="btn-open-epic">🔗 Open Epic Store</button>
+  </div>
+  <div class="step">
+    <div class="step-header"><div class="step-num">2</div><div class="step-title">Scan Your Library</div></div>
+    <div class="step-desc">Fetches your owned games via Epic's API. If it fails, check the Logs tab.</div>
+    <button class="btn btn-primary" id="btn-scan">
+      <div class="spinner" id="scan-spinner"></div>
+      <span id="scan-label">🎮 Scan Epic Library</span>
+    </button>
+  </div>
+  <div id="status"></div>
+</div>
+
+<!-- LIBRARY TAB -->
+<div class="panel" id="tab-library">
+  <div class="lib-toolbar">
+    <input class="lib-search" id="lib-search" placeholder="Search games…" autocomplete="off" />
+  </div>
+  <div class="lib-add-row">
+    <input class="lib-add-input" id="lib-add-input" placeholder="Add game manually…" autocomplete="off" />
+    <button class="btn-add" id="btn-add-game">+ Add</button>
+  </div>
+  <div class="games-list-wrap">
+    <div id="games-list"><div class="empty-state">No games saved yet.<br>Go to Scan tab to import your library.</div></div>
+  </div>
+  <div class="clear-confirm" id="clear-confirm">
+    <span>Delete all saved games?</span>
+    <button class="btn-confirm-yes" id="btn-clear-yes">Yes</button>
+    <button class="btn-confirm-no"  id="btn-clear-no">Cancel</button>
+  </div>
+  <div class="lib-footer">
+    <span class="lib-count" id="lib-count">0 games</span>
+    <button class="btn-clear-lib" id="btn-clear">Clear all</button>
+  </div>
+</div>
+
+<!-- LOGS TAB -->
+<div class="panel" id="tab-logs">
+  <div class="log-toolbar">
+    <span style="font-size:11px;color:var(--muted);flex:1">Scan diagnostics</span>
+    <button class="btn-copy-log" id="btn-copy-log">Copy</button>
+    <button class="btn-clear-log" id="btn-clear-log">Clear</button>
+  </div>
+  <div id="log-container"><div class="log-empty">No logs yet — run a scan first.</div></div>
+</div>
+
+<div class="footer">
+  Matching by title similarity &nbsp;·&nbsp; <a href="https://store.epicgames.com" target="_blank">Epic Store ↗</a>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
