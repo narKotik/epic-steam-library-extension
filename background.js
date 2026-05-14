@@ -3,7 +3,7 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.2.10";
+const VERSION = "1.2.11";
 
 // ── Logger ────────────────────────────────────────────────────────────────
 const logs = [];
@@ -255,39 +255,77 @@ async function fetchViaLibraryAPI(authToken) {
 
   info(`Library API total records (${page} page${page > 1 ? "s" : ""})`, allRecords.length);
 
-  // Log the raw shape of the first record so we can see every available field
-  if (allRecords.length > 0) {
-    info("Library API record[0] keys", Object.keys(allRecords[0]));
-    info("Library API record[0]", allRecords[0]);
-  }
-
-  const withCatalogItem = allRecords.filter(r => r.catalogItem != null).length;
-  info(`Library API catalogItem present on ${withCatalogItem}/${allRecords.length} records`);
-
-  // sandboxName breakdown: how many records share the most common value?
-  const nameFreq = {};
-  for (const r of allRecords) if (r.sandboxName) nameFreq[r.sandboxName] = (nameFreq[r.sandboxName] || 0) + 1;
-  const topGroups = Object.entries(nameFreq).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  info("Library API top sandboxName groups (name: count)", topGroups.map(([n, c]) => `${n}: ${c}`).join(", "));
-
   const isUUID = t => !t || /^[a-f0-9-]{32,}$/i.test(t);
 
-  const rawTitles = allRecords.flatMap(r => {
-    const sandbox  = isUUID(r.sandboxName)       ? null : r.sandboxName;
-    const catTitle = isUUID(r.catalogItem?.title) ? null : r.catalogItem?.title;
-    const root     = isUUID(r.title)             ? null : r.title;
-    const seen = new Set();
-    const out = [];
-    for (const t of [sandbox, catTitle, root]) {
-      if (t && t.length > 1 && !seen.has(t)) { seen.add(t); out.push(t); }
-    }
-    return out;
-  });
+  // Records with sandboxName "Live" have no useful title from the library endpoint
+  // (Epic uses "Live" as their production environment label for some publishers, e.g. Bethesda).
+  // Resolve their real titles via the catalog API.
+  // Records with "UE Marketplace" are Unreal Engine asset packs — skip them.
+  const liveRecords   = allRecords.filter(r => r.sandboxName === "Live");
+  const normalRecords = allRecords.filter(r => r.sandboxName !== "Live" && r.sandboxName !== "UE Marketplace");
+
+  const extraTitles = liveRecords.length > 0
+    ? await fetchCatalogTitles(liveRecords, authToken)
+    : [];
+
+  const rawTitles = [
+    ...normalRecords.flatMap(r => {
+      const sandbox = isUUID(r.sandboxName) ? null : r.sandboxName;
+      const root    = isUUID(r.title)       ? null : r.title;
+      const seen = new Set();
+      const out = [];
+      for (const t of [sandbox, root]) {
+        if (t && t.length > 1 && !seen.has(t)) { seen.add(t); out.push(t); }
+      }
+      return out;
+    }),
+    ...extraTitles,
+  ];
 
   const uniqueTitles = [...new Set(rawTitles)];
-  info(`Library API after dedup: ${rawTitles.length} raw → ${uniqueTitles.length} unique`);
+  info(`Library API: ${normalRecords.length} normal + ${liveRecords.length} catalog-resolved → ${uniqueTitles.length} unique titles`);
   info(`Library API OK — ${uniqueTitles.length} titles`);
   return uniqueTitles;
+}
+
+// ── Catalog API: resolve titles for records with sandboxName "Live" ───────
+async function fetchCatalogTitles(records, authToken) {
+  const CATALOG_BASE = "https://catalog-public-service-prod06.ol.epicgames.com/catalog/api/shared/namespace";
+
+  // Group catalogItemIds by namespace to batch each namespace into one request
+  const byNamespace = new Map();
+  for (const r of records) {
+    if (!r.namespace || !r.catalogItemId) continue;
+    if (!byNamespace.has(r.namespace)) byNamespace.set(r.namespace, new Set());
+    byNamespace.get(r.namespace).add(r.catalogItemId);
+  }
+  info(`Catalog API: ${records.length} "Live" records across ${byNamespace.size} namespaces`);
+
+  const results = await Promise.all(
+    Array.from(byNamespace.entries()).map(async ([namespace, ids]) => {
+      try {
+        const url = new URL(`${CATALOG_BASE}/${namespace}/bulk/items`);
+        for (const id of ids) url.searchParams.append("id", id);
+        url.searchParams.set("country", "US");
+        url.searchParams.set("locale", "en-US");
+
+        const resp = await fetch(url.toString(), { headers: authHeaders(authToken) });
+        if (!resp.ok) return [];
+        const json = await resp.json();
+
+        const items = Array.isArray(json) ? json : Object.values(json);
+        return items
+          .map(item => item?.title)
+          .filter(t => t && t.length > 1 && !isUUID(t));
+      } catch (e) {
+        return [];
+      }
+    })
+  );
+
+  const titles = results.flat();
+  info(`Catalog API resolved ${titles.length} titles`);
+  return titles;
 }
 
 // ── Method 4: Epic account owned items (newer endpoint) ───────────────────

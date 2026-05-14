@@ -148,30 +148,19 @@ btnClearLog.addEventListener("click", () => { storedLogs = []; renderLogs([]); }
 // ── Scan ──────────────────────────────────────────────────────────────────
 btnOpenEpic.addEventListener("click", () => chrome.tabs.create({ url: "https://store.epicgames.com" }));
 
-btnScan.addEventListener("click", async () => {
+btnScan.addEventListener("click", () => {
   btnScan.disabled = true;
   scanSpinner.style.display = "block";
   scanLabel.textContent = "Scanning…";
   setStatus("", "");
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) { setStatus("No active tab found.", "err"); resetScanBtn(); return; }
-
-  if (!tab.url?.includes("epicgames.com")) {
-    setStatus("Open an Epic Store page first, then scan.", "warn");
-    resetScanBtn();
-    return;
-  }
-
-  chrome.tabs.sendMessage(tab.id, { action: "scanEpicLibrary" }, (response) => {
+  // Send directly to the background service worker — no active Epic tab needed.
+  // Background uses the EPIC_EG1 cookie for auth.
+  chrome.runtime.sendMessage({ action: "doScan", authToken: null, accountId: null }, (response) => {
     resetScanBtn();
 
     if (chrome.runtime.lastError) {
-      const errMsg = chrome.runtime.lastError.message || "Unknown";
-      setStatus("Could not reach content script — reload the Epic page.", "err");
-      storedLogs = [{ time: new Date().toISOString().slice(11,23), level: "error", msg: "chrome.runtime error: " + errMsg }];
-      renderLogs(storedLogs);
-      switchTab("logs");
+      setStatus("Extension error — try reloading.", "err");
       return;
     }
     if (!response) {
