@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Epic Library on Steam",
-  "version": "1.2.14",
+  "version": "1.2.17",
   "description": "Shows your Epic Games library on Steam store pages — see which games you already own before buying.",
   "permissions": [
     "storage",

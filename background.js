@@ -3,7 +3,7 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.2.14";
+const VERSION = "1.2.17";
 
 // ── Logger ────────────────────────────────────────────────────────────────
 const logs = [];
@@ -253,18 +253,23 @@ async function fetchViaLibraryAPI(authToken) {
 
   info(`Library API total records (${page} page${page > 1 ? "s" : ""})`, allRecords.length);
 
-  // Records with sandboxName "Live" have no useful title from the library endpoint
-  // (Epic uses "Live" as their production environment label for some publishers, e.g. Bethesda).
-  // Resolve their real titles via the catalog API.
-  // Records with "UE Marketplace" are Unreal Engine asset packs — skip them.
+  // Records with sandboxName "Live" = Bethesda/ZeniMax — no useful title from library endpoint.
+  // Records with "UE Marketplace" are Unreal Engine asset packs — skip them entirely.
+  // All others: call catalog API to get real titles (sandboxName is often an internal codename).
   const liveRecords   = allRecords.filter(r => r.sandboxName === "Live");
   const normalRecords = allRecords.filter(r => r.sandboxName !== "Live" && r.sandboxName !== "UE Marketplace");
 
-  const extraTitles = liveRecords.length > 0
-    ? await fetchCatalogTitles(liveRecords, authToken)
-    : [];
+  // Fetch real titles from catalog for all records in parallel
+  const [normalCatalogTitles, liveCatalogTitles] = await Promise.all([
+    normalRecords.length > 0 ? fetchCatalogTitles(normalRecords, authToken, "normal") : Promise.resolve([]),
+    liveRecords.length   > 0 ? fetchCatalogTitles(liveRecords,   authToken, "live")   : Promise.resolve([]),
+  ]);
 
   const rawTitles = [
+    // Catalog-resolved titles (real game names — preferred over internal codenames)
+    ...normalCatalogTitles,
+    ...liveCatalogTitles,
+    // Fallback: sandboxName/title field for records not resolved by catalog
     ...normalRecords.flatMap(r => {
       const sandbox = _isUUID(r.sandboxName) ? null : r.sandboxName;
       const root    = _isUUID(r.title)       ? null : r.title;
@@ -275,16 +280,16 @@ async function fetchViaLibraryAPI(authToken) {
       }
       return out;
     }),
-    ...extraTitles,
   ];
 
-  const uniqueTitles = [...new Set(rawTitles)].sort((a, b) => a.localeCompare(b));
-  info(`Library API: ${normalRecords.length} normal + ${liveRecords.length} catalog-resolved → ${uniqueTitles.length} unique titles`);
+  const cleanTitles = rawTitles.filter(t => !_isJunkTitle(t));
+  const uniqueTitles = [...new Set(cleanTitles)].sort((a, b) => a.localeCompare(b));
+  info(`Library API: ${normalRecords.length} normal (${normalCatalogTitles.length} catalog) + ${liveRecords.length} Live (${liveCatalogTitles.length} catalog) → ${rawTitles.length - cleanTitles.length} junk filtered → ${uniqueTitles.length} unique titles`);
 
   // Full sorted lists for diagnosis — copy from the Logs tab
-  logDump("FULL API titles (sorted)", [...new Set(rawTitles)].sort((a, b) => a.localeCompare(b)));
-  logDump("FULL normal sandboxNames (sorted)", [...new Set(normalRecords.map(r => r.sandboxName).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
-  logDump("FULL catalog titles from Live records (sorted)", [...new Set(extraTitles)].sort((a, b) => a.localeCompare(b)));
+  logDump("FULL API titles (sorted)", uniqueTitles);
+  logDump("FULL normal catalog titles (sorted)", [...new Set(normalCatalogTitles)].sort((a, b) => a.localeCompare(b)));
+  logDump("FULL Live catalog titles (sorted)", [...new Set(liveCatalogTitles)].sort((a, b) => a.localeCompare(b)));
 
   info(`Library API OK — ${uniqueTitles.length} titles`);
   return uniqueTitles;
@@ -293,7 +298,30 @@ async function fetchViaLibraryAPI(authToken) {
 // ── Catalog API: resolve titles for records with sandboxName "Live" ───────
 const _isUUID = t => !t || /^[a-f0-9-]{32,}$/i.test(t);
 
-async function fetchCatalogTitles(records, authToken) {
+// Epic uses single-word geographic/food/element/animal names as internal project codenames.
+// These appear as sandboxName values in the library API and must be filtered before saving.
+const _EPIC_CODENAMES = new Set([
+  "alabaster","amethyst","angora","brilliantrose","burbank",
+  "capsicum","charlestongreen","corn","curium",
+  "dewberry","diamond","dublin","dysprosium",
+  "empanada","fregula","hydra","laurel","lemon","lion","lisbon",
+  "mezzelune","moremi","munster","nebelung",
+  "radicchio","risotto","seaborgium","strontium",
+  "torshavn","toucan","yttrium",
+]);
+
+const _isJunkTitle = t => {
+  if (!t) return true;
+  const lower = t.toLowerCase();
+  return (
+    lower === "ut marketplace" ||
+    /\bproduction\b/i.test(t) ||
+    /^Mt[A-Z]/.test(t) ||
+    _EPIC_CODENAMES.has(lower)
+  );
+};
+
+async function fetchCatalogTitles(records, authToken, label = "catalog") {
   const CATALOG_BASE = "https://catalog-public-service-prod06.ol.epicgames.com/catalog/api/shared/namespace";
 
   const byNamespace = new Map();
@@ -302,7 +330,7 @@ async function fetchCatalogTitles(records, authToken) {
     if (!byNamespace.has(r.namespace)) byNamespace.set(r.namespace, new Set());
     byNamespace.get(r.namespace).add(r.catalogItemId);
   }
-  info(`Catalog API: ${records.length} "Live" records across ${byNamespace.size} namespaces`);
+  info(`Catalog API (${label}): ${records.length} records across ${byNamespace.size} namespaces`);
 
   let okCount = 0, failCount = 0, sampleLogged = false;
 
@@ -337,7 +365,7 @@ async function fetchCatalogTitles(records, authToken) {
   );
 
   const titles = results.flat();
-  info(`Catalog API: ${okCount} ok / ${failCount} failed → ${titles.length} titles`);
+  info(`Catalog API (${label}): ${okCount} ok / ${failCount} failed → ${titles.length} titles`);
   return titles;
 }
 
