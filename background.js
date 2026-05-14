@@ -3,7 +3,7 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.2.13";
+const VERSION = "1.2.14";
 
 // ── Logger ────────────────────────────────────────────────────────────────
 const logs = [];
@@ -21,6 +21,10 @@ function log(level, msg, data) {
 const info  = (m, d) => log("info",  m, d);
 const warn  = (m, d) => log("warn",  m, d);
 const error = (m, d) => log("error", m, d);
+// logDump: stores full data without the 400-char truncation, for copying full title lists
+function logDump(msg, data) {
+  logs.push({ time: new Date().toISOString().slice(11, 23), level: "info", msg, data: JSON.stringify(data) });
+}
 
 // ── Get Epic auth token from cookies via chrome.cookies API ───────────────
 async function getEpicAuthFromCookies() {
@@ -274,8 +278,14 @@ async function fetchViaLibraryAPI(authToken) {
     ...extraTitles,
   ];
 
-  const uniqueTitles = [...new Set(rawTitles)];
+  const uniqueTitles = [...new Set(rawTitles)].sort((a, b) => a.localeCompare(b));
   info(`Library API: ${normalRecords.length} normal + ${liveRecords.length} catalog-resolved → ${uniqueTitles.length} unique titles`);
+
+  // Full sorted lists for diagnosis — copy from the Logs tab
+  logDump("FULL API titles (sorted)", [...new Set(rawTitles)].sort((a, b) => a.localeCompare(b)));
+  logDump("FULL normal sandboxNames (sorted)", [...new Set(normalRecords.map(r => r.sandboxName).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
+  logDump("FULL catalog titles from Live records (sorted)", [...new Set(extraTitles)].sort((a, b) => a.localeCompare(b)));
+
   info(`Library API OK — ${uniqueTitles.length} titles`);
   return uniqueTitles;
 }
