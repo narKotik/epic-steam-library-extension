@@ -3,7 +3,7 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.2.9";
+const VERSION = "1.2.10";
 
 // ── Logger ────────────────────────────────────────────────────────────────
 const logs = [];
@@ -255,14 +255,27 @@ async function fetchViaLibraryAPI(authToken) {
 
   info(`Library API total records (${page} page${page > 1 ? "s" : ""})`, allRecords.length);
 
+  // Log the raw shape of the first record so we can see every available field
+  if (allRecords.length > 0) {
+    info("Library API record[0] keys", Object.keys(allRecords[0]));
+    info("Library API record[0]", allRecords[0]);
+  }
+
+  const withCatalogItem = allRecords.filter(r => r.catalogItem != null).length;
+  info(`Library API catalogItem present on ${withCatalogItem}/${allRecords.length} records`);
+
+  // sandboxName breakdown: how many records share the most common value?
+  const nameFreq = {};
+  for (const r of allRecords) if (r.sandboxName) nameFreq[r.sandboxName] = (nameFreq[r.sandboxName] || 0) + 1;
+  const topGroups = Object.entries(nameFreq).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  info("Library API top sandboxName groups (name: count)", topGroups.map(([n, c]) => `${n}: ${c}`).join(", "));
+
   const isUUID = t => !t || /^[a-f0-9-]{32,}$/i.test(t);
 
-  // Collect both sandboxName (parent game name, groups DLC) and catalogItem.title
-  // (specific item name, captures edition titles like "GOTY Edition" that differ from parent).
   const rawTitles = allRecords.flatMap(r => {
-    const sandbox  = isUUID(r.sandboxName)        ? null : r.sandboxName;
-    const catTitle = isUUID(r.catalogItem?.title)  ? null : r.catalogItem?.title;
-    const root     = isUUID(r.title)              ? null : r.title;
+    const sandbox  = isUUID(r.sandboxName)       ? null : r.sandboxName;
+    const catTitle = isUUID(r.catalogItem?.title) ? null : r.catalogItem?.title;
+    const root     = isUUID(r.title)             ? null : r.title;
     const seen = new Set();
     const out = [];
     for (const t of [sandbox, catTitle, root]) {
