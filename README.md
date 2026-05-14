@@ -95,7 +95,8 @@ The logs show which API method was used, how many records were returned, and any
 
 - Free games claimed from Epic (weekly giveaways) appear in your library and will be detected
 - Games with very different names on Epic vs Steam may not be matched (e.g. regional title differences)
-- Some games in Epic's API may be DLC entitlements or compatibility records rather than owned base games
+- **DLC is listed separately** — Epic's API returns DLC packs as individual entries, so your library count will often be higher than the number of base games shown in the Epic launcher. This is expected behaviour. Use the ignore list to hide any DLC entries you don't want cluttering your list.
+- Some entries in Epic's API may be compatibility records or internal catalog items rather than owned base games
 
 ## Privacy
 
