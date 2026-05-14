@@ -201,10 +201,15 @@ btnScan.addEventListener("click", () => {
     }
 
     if (!response.success) {
-      const authErr = response.error?.includes("401") || response.error?.includes("authenticated");
-      setAuthState(!authErr);
-      setStatus(`❌ ${response.error}`, "err");
-      switchTab("logs");
+      const authErr = response.error?.includes("401") || response.error?.includes("403") || response.error?.includes("authenticated");
+      if (authErr) {
+        setAuthState(false);
+        setStatus("Not signed in to Epic in Chrome — click the button to open the store and log in.", "warn");
+      } else {
+        setAuthState(true);
+        setStatus(`❌ ${response.error}`, "err");
+        switchTab("logs");
+      }
       return;
     }
 
