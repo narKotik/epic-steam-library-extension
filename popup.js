@@ -16,14 +16,26 @@ const gamesList    = document.getElementById("games-list");
 const libCount     = document.getElementById("lib-count");
 const libSearch    = document.getElementById("lib-search");
 const libAddInput  = document.getElementById("lib-add-input");
-const logContainer  = document.getElementById("log-container");
-const chkDebugLogs  = document.getElementById("chk-debug-logs");
+const logContainer    = document.getElementById("log-container");
+const chkDebugLogs    = document.getElementById("chk-debug-logs");
+const libSearchClear  = document.getElementById("lib-search-clear");
 
 let allGames   = [];
 let allIgnored = [];
 let storedLogs = [];
 let hasAuth    = false;
 let initialLoad = true;
+
+const normKey = s => s.replace(/[™®©]/g, "").toLowerCase().trim();
+const preferRicher = (a, b) => (/[™®©]/.test(b) && !/[™®©]/.test(a)) ? b : a;
+function deduplicateList(arr) {
+  const seen = new Map();
+  for (const g of arr) {
+    const k = normKey(g);
+    seen.set(k, seen.has(k) ? preferRicher(seen.get(k), g) : g);
+  }
+  return [...seen.values()];
+}
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
 document.querySelectorAll(".tab").forEach(tab => {
@@ -54,8 +66,14 @@ function timeAgo(ts) {
 // ── Library ───────────────────────────────────────────────────────────────
 function loadData() {
   chrome.storage.local.get([STORAGE_KEY, IGNORE_KEY, "epicLastScan"], (result) => {
-    allGames   = result[STORAGE_KEY] || [];
-    allIgnored = result[IGNORE_KEY]  || [];
+    const rawGames   = result[STORAGE_KEY] || [];
+    const rawIgnored = result[IGNORE_KEY]  || [];
+    allGames   = deduplicateList(rawGames);
+    allIgnored = deduplicateList(rawIgnored);
+    // Persist cleanup if dedup removed anything
+    if (allGames.length !== rawGames.length || allIgnored.length !== rawIgnored.length) {
+      chrome.storage.local.set({ [STORAGE_KEY]: allGames, [IGNORE_KEY]: allIgnored });
+    }
     statScan.textContent = timeAgo(result.epicLastScan);
     renderLibrary(libSearch.value);
     renderIgnored();
@@ -152,17 +170,13 @@ document.getElementById("btn-ignored-toggle").addEventListener("click", () => {
 
 function ignoreGame(name) {
   allGames = allGames.filter(x => x !== name);
-  if (!allIgnored.some(x => x.toLowerCase() === name.toLowerCase())) {
-    allIgnored.push(name);
-  }
+  if (!allIgnored.some(x => normKey(x) === normKey(name))) allIgnored.push(name);
   chrome.storage.local.set({ [STORAGE_KEY]: allGames, [IGNORE_KEY]: allIgnored }, () => loadData());
 }
 
 function restoreGame(name) {
   allIgnored = allIgnored.filter(x => x !== name);
-  if (!allGames.some(x => x.toLowerCase() === name.toLowerCase())) {
-    allGames.push(name);
-  }
+  if (!allGames.some(x => normKey(x) === normKey(name))) allGames.push(name);
   chrome.storage.local.set({ [STORAGE_KEY]: allGames, [IGNORE_KEY]: allIgnored }, () => loadData());
 }
 
@@ -174,11 +188,11 @@ function deleteFromIgnored(name) {
 function addGame() {
   const name = libAddInput.value.trim();
   if (!name) { libAddInput.value = ""; return; }
-  const lower = name.toLowerCase();
-  if (allGames.some(x => x.toLowerCase() === lower)) { libAddInput.value = ""; return; }
+  const lower = normKey(name);
+  if (allGames.some(x => normKey(x) === lower)) { libAddInput.value = ""; return; }
   // If the game is currently ignored, restore it instead of adding a duplicate
-  if (allIgnored.some(x => x.toLowerCase() === lower)) {
-    allIgnored = allIgnored.filter(x => x.toLowerCase() !== lower);
+  if (allIgnored.some(x => normKey(x) === lower)) {
+    allIgnored = allIgnored.filter(x => normKey(x) !== lower);
     allGames.push(name);
     chrome.storage.local.set({ [STORAGE_KEY]: allGames, [IGNORE_KEY]: allIgnored }, () => { loadData(); libAddInput.value = ""; });
     return;
@@ -189,7 +203,16 @@ function addGame() {
 
 btnAddGame.addEventListener("click", addGame);
 libAddInput.addEventListener("keydown", e => { if (e.key === "Enter") addGame(); });
-libSearch.addEventListener("input", () => renderLibrary(libSearch.value));
+libSearch.addEventListener("input", () => {
+  libSearchClear.style.display = libSearch.value ? "block" : "none";
+  renderLibrary(libSearch.value);
+});
+libSearchClear.addEventListener("click", () => {
+  libSearch.value = "";
+  libSearchClear.style.display = "none";
+  renderLibrary("");
+  libSearch.focus();
+});
 const clearConfirm = document.getElementById("clear-confirm");
 btnClear.addEventListener("click", () => clearConfirm.classList.add("visible"));
 document.getElementById("btn-clear-no").addEventListener("click", () => clearConfirm.classList.remove("visible"));

@@ -65,9 +65,12 @@
 
     /* Library panel */
     .lib-toolbar { display:flex; align-items:center; gap:6px; }
-    .lib-search { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:6px 9px; color:var(--text); font-size:12px; font-family:inherit; outline:none; }
+    .lib-search-wrap { position:relative; flex:1; display:flex; }
+    .lib-search { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:6px 26px 6px 9px; color:var(--text); font-size:12px; font-family:inherit; outline:none; width:100%; }
     .lib-search::placeholder { color:var(--muted); }
     .lib-search:focus { border-color: var(--epic); }
+    .lib-search-clear { position:absolute; right:7px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--muted); cursor:pointer; font-size:11px; padding:2px 3px; line-height:1; border-radius:3px; display:none; }
+    .lib-search-clear:hover { color:var(--text); background:var(--surface2); }
     .lib-add-row { display:flex; gap:6px; }
     .lib-add-input { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:7px 9px; color:var(--text); font-size:12px; font-family:inherit; outline:none; }
     .lib-add-input::placeholder { color:var(--muted); }
@@ -128,7 +131,7 @@
     <div class="header-name">Epic Library on Steam</div>
     <div class="header-sub">Cross-library ownership checker</div>
   </div>
-  <div class="header-ver">v1.3.2</div>
+  <div class="header-ver">v1.3.3</div>
 </div>
 
 <div class="tabs">
@@ -140,7 +143,10 @@
 <!-- LIBRARY TAB -->
 <div class="panel active" id="tab-library">
   <div class="lib-toolbar">
-    <input class="lib-search" id="lib-search" placeholder="Search games…" autocomplete="off" />
+    <div class="lib-search-wrap">
+      <input class="lib-search" id="lib-search" placeholder="Search games…" autocomplete="off" />
+      <button class="lib-search-clear" id="lib-search-clear" title="Clear search">✕</button>
+    </div>
   </div>
   <div class="lib-add-row">
     <input class="lib-add-input" id="lib-add-input" placeholder="Add game manually…" autocomplete="off" />
