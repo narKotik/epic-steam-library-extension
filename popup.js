@@ -3,7 +3,6 @@
 const STORAGE_KEY = "epicOwnedGames";
 
 const btnScan      = document.getElementById("btn-scan");
-const btnOpenEpic  = document.getElementById("btn-open-epic");
 const btnClear     = document.getElementById("btn-clear");
 const btnAddGame   = document.getElementById("btn-add-game");
 const btnCopyLog   = document.getElementById("btn-copy-log");
@@ -21,6 +20,8 @@ const logContainer = document.getElementById("log-container");
 
 let allGames = [];
 let storedLogs = [];
+let hasAuth = false;
+let initialLoad = true;
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
 document.querySelectorAll(".tab").forEach(tab => {
@@ -55,6 +56,10 @@ function loadData() {
     statCount.textContent = allGames.length;
     statScan.textContent = timeAgo(result.epicLastScan);
     renderLibrary();
+    if (initialLoad) {
+      initialLoad = false;
+      if (allGames.length === 0) switchTab("scan");
+    }
   });
 }
 
@@ -146,24 +151,46 @@ btnCopyLog.addEventListener("click", () => {
 btnClearLog.addEventListener("click", () => { storedLogs = []; renderLogs([]); });
 
 // ── Scan ──────────────────────────────────────────────────────────────────
-btnOpenEpic.addEventListener("click", () => chrome.tabs.create({ url: "https://store.epicgames.com" }));
+const scanDesc = document.getElementById("scan-desc");
+
+function setAuthState(auth) {
+  hasAuth = auth;
+  btnScan.disabled = false;
+  scanSpinner.style.display = "none";
+  if (auth) {
+    scanLabel.textContent = "🎮 Scan Epic Library";
+    scanDesc.textContent = "Reads your owned games from Epic's API using your browser session.";
+  } else {
+    scanLabel.textContent = "🔗 Open Epic Store & Scan";
+    scanDesc.textContent = "You're not signed in to Epic. Click to open the store, sign in, then scan.";
+  }
+}
+
+// Check auth on popup open and set button state
+chrome.runtime.sendMessage({ action: "checkAuth" }, (r) => setAuthState(!!r?.hasAuth));
 
 btnScan.addEventListener("click", () => {
+  if (!hasAuth) {
+    // Not logged in — open Epic Store and flip button to scan mode so user can scan after login
+    chrome.tabs.create({ url: "https://store.epicgames.com" });
+    setStatus("Sign in to Epic, then click Scan.", "warn");
+    setAuthState(true);
+    return;
+  }
+
   btnScan.disabled = true;
   scanSpinner.style.display = "block";
   scanLabel.textContent = "Scanning…";
   setStatus("", "");
 
-  // Send directly to the background service worker — no active Epic tab needed.
-  // Background uses the EPIC_EG1 cookie for auth.
   chrome.runtime.sendMessage({ action: "doScan", authToken: null, accountId: null }, (response) => {
-    resetScanBtn();
-
     if (chrome.runtime.lastError) {
+      setAuthState(hasAuth);
       setStatus("Extension error — try reloading.", "err");
       return;
     }
     if (!response) {
+      setAuthState(hasAuth);
       setStatus("No response received.", "err");
       return;
     }
@@ -174,11 +201,14 @@ btnScan.addEventListener("click", () => {
     }
 
     if (!response.success) {
+      const authErr = response.error?.includes("401") || response.error?.includes("authenticated");
+      setAuthState(!authErr);
       setStatus(`❌ ${response.error}`, "err");
       switchTab("logs");
       return;
     }
 
+    setAuthState(true);
     if (!response.games?.length) {
       setStatus("⚠️ Scan ran but found 0 games — check Logs tab.", "warn");
       switchTab("logs");
@@ -189,12 +219,6 @@ btnScan.addEventListener("click", () => {
     }
   });
 });
-
-function resetScanBtn() {
-  btnScan.disabled = false;
-  scanSpinner.style.display = "none";
-  scanLabel.textContent = "🎮 Scan Epic Library";
-}
 
 // ── Init ──────────────────────────────────────────────────────────────────
 loadData();

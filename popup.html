@@ -118,7 +118,7 @@
     <div class="header-name">Epic Library on Steam</div>
     <div class="header-sub">Cross-library ownership checker</div>
   </div>
-  <div class="header-ver">v1.2.11</div>
+  <div class="header-ver">v1.2.12</div>
 </div>
 
 <div class="stats">
@@ -159,12 +159,11 @@
 <div class="panel" id="tab-scan">
   <div class="step">
     <div class="step-header"><div class="step-num">1</div><div class="step-title">Scan Your Library</div></div>
-    <div class="step-desc">Reads your owned games from Epic's API using your browser session. Make sure you're signed in to the Epic Games Store.</div>
-    <button class="btn btn-primary" id="btn-scan">
+    <div class="step-desc" id="scan-desc">Checking Epic session…</div>
+    <button class="btn btn-primary" id="btn-scan" disabled>
       <div class="spinner" id="scan-spinner"></div>
-      <span id="scan-label">🎮 Scan Epic Library</span>
+      <span id="scan-label">…</span>
     </button>
-    <button class="btn btn-secondary" id="btn-open-epic">🔗 Open Epic Store</button>
   </div>
   <div id="status"></div>
 </div>

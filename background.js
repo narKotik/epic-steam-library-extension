@@ -3,7 +3,7 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.2.11";
+const VERSION = "1.2.12";
 
 // ── Logger ────────────────────────────────────────────────────────────────
 const logs = [];
@@ -255,8 +255,6 @@ async function fetchViaLibraryAPI(authToken) {
 
   info(`Library API total records (${page} page${page > 1 ? "s" : ""})`, allRecords.length);
 
-  const isUUID = t => !t || /^[a-f0-9-]{32,}$/i.test(t);
-
   // Records with sandboxName "Live" have no useful title from the library endpoint
   // (Epic uses "Live" as their production environment label for some publishers, e.g. Bethesda).
   // Resolve their real titles via the catalog API.
@@ -270,8 +268,8 @@ async function fetchViaLibraryAPI(authToken) {
 
   const rawTitles = [
     ...normalRecords.flatMap(r => {
-      const sandbox = isUUID(r.sandboxName) ? null : r.sandboxName;
-      const root    = isUUID(r.title)       ? null : r.title;
+      const sandbox = _isUUID(r.sandboxName) ? null : r.sandboxName;
+      const root    = _isUUID(r.title)       ? null : r.title;
       const seen = new Set();
       const out = [];
       for (const t of [sandbox, root]) {
@@ -289,10 +287,11 @@ async function fetchViaLibraryAPI(authToken) {
 }
 
 // ── Catalog API: resolve titles for records with sandboxName "Live" ───────
+const _isUUID = t => !t || /^[a-f0-9-]{32,}$/i.test(t);
+
 async function fetchCatalogTitles(records, authToken) {
   const CATALOG_BASE = "https://catalog-public-service-prod06.ol.epicgames.com/catalog/api/shared/namespace";
 
-  // Group catalogItemIds by namespace to batch each namespace into one request
   const byNamespace = new Map();
   for (const r of records) {
     if (!r.namespace || !r.catalogItemId) continue;
@@ -300,6 +299,8 @@ async function fetchCatalogTitles(records, authToken) {
     byNamespace.get(r.namespace).add(r.catalogItemId);
   }
   info(`Catalog API: ${records.length} "Live" records across ${byNamespace.size} namespaces`);
+
+  let okCount = 0, failCount = 0, sampleLogged = false;
 
   const results = await Promise.all(
     Array.from(byNamespace.entries()).map(async ([namespace, ids]) => {
@@ -310,21 +311,29 @@ async function fetchCatalogTitles(records, authToken) {
         url.searchParams.set("locale", "en-US");
 
         const resp = await fetch(url.toString(), { headers: authHeaders(authToken) });
-        if (!resp.ok) return [];
+        if (!resp.ok) {
+          failCount++;
+          if (failCount <= 2) warn(`Catalog API HTTP ${resp.status}`, namespace.slice(0, 8));
+          return [];
+        }
+        okCount++;
         const json = await resp.json();
+        if (!sampleLogged) { sampleLogged = true; info("Catalog API sample response", json); }
 
         const items = Array.isArray(json) ? json : Object.values(json);
         return items
           .map(item => item?.title)
-          .filter(t => t && t.length > 1 && !isUUID(t));
+          .filter(t => t && t.length > 1 && !_isUUID(t));
       } catch (e) {
+        failCount++;
+        if (failCount <= 1) warn("Catalog API exception", e.message);
         return [];
       }
     })
   );
 
   const titles = results.flat();
-  info(`Catalog API resolved ${titles.length} titles`);
+  info(`Catalog API: ${okCount} ok / ${failCount} failed → ${titles.length} titles`);
   return titles;
 }
 
@@ -419,6 +428,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.storage.local.get([STORAGE_KEY, "epicLastScan"], result => {
       sendResponse({ count: result[STORAGE_KEY]?.length || 0, lastScan: result.epicLastScan || null });
     });
+    return true;
+  }
+
+  if (msg.action === "checkAuth") {
+    getEpicAuthFromCookies().then(token => sendResponse({ hasAuth: !!token }));
     return true;
   }
 });
