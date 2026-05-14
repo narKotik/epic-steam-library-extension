@@ -250,18 +250,27 @@ importFile.addEventListener("change", () => {
   const file = importFile.files[0];
   if (!file) return;
   importFile.value = "";
+  if (file.size > 5 * 1024 * 1024) { setLibStatus("File too large (max 5 MB)", "err"); return; }
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
       const data = JSON.parse(e.target.result);
       if (!Array.isArray(data.games) && !Array.isArray(data.ignored)) throw new Error();
-      const newGames   = (data.games   || []).filter(g => typeof g === "string");
-      const newIgnored = (data.ignored || []).filter(g => typeof g === "string");
+      // Accept only plain strings within reasonable bounds; silently drop anything else
+      const sanitize = arr => (arr || [])
+        .filter(g => typeof g === "string" && g.length > 0 && g.length <= 300)
+        .slice(0, 10000);
+      const newGames   = sanitize(data.games);
+      const newIgnored = sanitize(data.ignored);
       const mergedGames   = deduplicateList([...allGames,   ...newGames]);
       const mergedIgnored = deduplicateList([...allIgnored, ...newIgnored]);
       const ignoredKeys   = new Set(mergedIgnored.map(normKey));
       const finalGames    = mergedGames.filter(g => !ignoredKeys.has(normKey(g)));
       chrome.storage.local.set({ [STORAGE_KEY]: finalGames, [IGNORE_KEY]: mergedIgnored }, () => {
+        if (chrome.runtime.lastError) {
+          setLibStatus("Save failed: " + chrome.runtime.lastError.message, "err");
+          return;
+        }
         loadData();
         setLibStatus(`Imported ${newGames.length} games, ${newIgnored.length} ignored`, "ok");
       });

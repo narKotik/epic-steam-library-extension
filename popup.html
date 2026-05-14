@@ -169,12 +169,6 @@
     <span class="lib-count" id="lib-count">0 games</span>
     <button class="btn-clear-lib" id="btn-clear">Clear all</button>
   </div>
-  <div class="lib-actions">
-    <button class="btn-lib-io" id="btn-export">↑ Export</button>
-    <button class="btn-lib-io" id="btn-import">↓ Import</button>
-    <input type="file" id="import-file" accept=".json" style="display:none">
-  </div>
-  <div id="lib-io-status"></div>
   <div id="ignored-toggle-row" style="display:none;">
     <button class="btn-ignored-toggle" id="btn-ignored-toggle">
       <span>Ignored games (<span id="ignored-count">0</span>)</span>
@@ -201,6 +195,12 @@
     <div class="scan-meta">Last scan: <span id="stat-scan">—</span></div>
   </div>
   <div id="status"></div>
+  <div class="lib-actions">
+    <button class="btn-lib-io" id="btn-export">↑ Export library</button>
+    <button class="btn-lib-io" id="btn-import">↓ Import library</button>
+    <input type="file" id="import-file" accept=".json" style="display:none">
+  </div>
+  <div id="lib-io-status"></div>
 </div>
 
 <!-- LOGS TAB -->
