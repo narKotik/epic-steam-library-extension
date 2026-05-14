@@ -92,6 +92,11 @@
     .lib-count { font-size:10px; color:var(--muted); }
     .btn-clear-lib { font-size:10px; color:var(--red); background:none; border:none; cursor:pointer; font-family:inherit; padding:2px 4px; border-radius:4px; }
     .btn-clear-lib:hover { background:rgba(248,81,73,.12); }
+    .lib-actions { display:flex; gap:6px; }
+    .btn-lib-io { flex:1; padding:5px 8px; border-radius:5px; background:var(--surface2); color:var(--muted); border:1px solid var(--border); font-size:10px; font-weight:600; cursor:pointer; font-family:inherit; }
+    .btn-lib-io:hover { color:var(--text); border-color:#4a5568; }
+    #lib-io-status { font-size:10px; text-align:center; min-height:14px; }
+    #lib-io-status.ok { color:var(--green); } #lib-io-status.err { color:var(--red); }
     .clear-confirm { display:none; align-items:center; gap:8px; padding:7px 10px; background:rgba(248,81,73,.08); border:1px solid rgba(248,81,73,.25); border-radius:6px; font-size:11px; color:var(--red); }
     .clear-confirm.visible { display:flex; }
     .clear-confirm span { flex:1; }
@@ -131,7 +136,7 @@
     <div class="header-name">Epic Library on Steam</div>
     <div class="header-sub">Cross-library ownership checker</div>
   </div>
-  <div class="header-ver">v1.3.3</div>
+  <div class="header-ver">v1.3.4</div>
 </div>
 
 <div class="tabs">
@@ -164,6 +169,12 @@
     <span class="lib-count" id="lib-count">0 games</span>
     <button class="btn-clear-lib" id="btn-clear">Clear all</button>
   </div>
+  <div class="lib-actions">
+    <button class="btn-lib-io" id="btn-export">↑ Export</button>
+    <button class="btn-lib-io" id="btn-import">↓ Import</button>
+    <input type="file" id="import-file" accept=".json" style="display:none">
+  </div>
+  <div id="lib-io-status"></div>
   <div id="ignored-toggle-row" style="display:none;">
     <button class="btn-ignored-toggle" id="btn-ignored-toggle">
       <span>Ignored games (<span id="ignored-count">0</span>)</span>

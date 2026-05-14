@@ -19,6 +19,10 @@ const libAddInput  = document.getElementById("lib-add-input");
 const logContainer    = document.getElementById("log-container");
 const chkDebugLogs    = document.getElementById("chk-debug-logs");
 const libSearchClear  = document.getElementById("lib-search-clear");
+const btnExport       = document.getElementById("btn-export");
+const btnImport       = document.getElementById("btn-import");
+const importFile      = document.getElementById("import-file");
+const libIoStatus     = document.getElementById("lib-io-status");
 
 let allGames   = [];
 let allIgnored = [];
@@ -219,6 +223,53 @@ document.getElementById("btn-clear-no").addEventListener("click", () => clearCon
 document.getElementById("btn-clear-yes").addEventListener("click", () => {
   clearConfirm.classList.remove("visible");
   chrome.storage.local.remove([STORAGE_KEY, "epicLastScan"], () => { allGames = []; loadData(); });
+});
+
+// ── Export / Import ───────────────────────────────────────────────────────
+function setLibStatus(msg, type = "", duration = 3000) {
+  libIoStatus.textContent = msg;
+  libIoStatus.className = type;
+  if (duration) setTimeout(() => { libIoStatus.textContent = ""; libIoStatus.className = ""; }, duration);
+}
+
+btnExport.addEventListener("click", () => {
+  const data = { version: 1, exported: new Date().toISOString(), games: allGames, ignored: allIgnored };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `epic-library-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setLibStatus(`Exported ${allGames.length} games, ${allIgnored.length} ignored`);
+});
+
+btnImport.addEventListener("click", () => importFile.click());
+
+importFile.addEventListener("change", () => {
+  const file = importFile.files[0];
+  if (!file) return;
+  importFile.value = "";
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!Array.isArray(data.games) && !Array.isArray(data.ignored)) throw new Error();
+      const newGames   = (data.games   || []).filter(g => typeof g === "string");
+      const newIgnored = (data.ignored || []).filter(g => typeof g === "string");
+      const mergedGames   = deduplicateList([...allGames,   ...newGames]);
+      const mergedIgnored = deduplicateList([...allIgnored, ...newIgnored]);
+      const ignoredKeys   = new Set(mergedIgnored.map(normKey));
+      const finalGames    = mergedGames.filter(g => !ignoredKeys.has(normKey(g)));
+      chrome.storage.local.set({ [STORAGE_KEY]: finalGames, [IGNORE_KEY]: mergedIgnored }, () => {
+        loadData();
+        setLibStatus(`Imported ${newGames.length} games, ${newIgnored.length} ignored`, "ok");
+      });
+    } catch {
+      setLibStatus("Invalid file", "err");
+    }
+  };
+  reader.readAsText(file);
 });
 
 // ── Logs ──────────────────────────────────────────────────────────────────

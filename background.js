@@ -3,7 +3,7 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.3.2";
+const VERSION = "1.3.4";
 let DEBUG = false; // set true (or via Debug logs checkbox in popup) to enable full title-list dumps
 
 // ── Logger ────────────────────────────────────────────────────────────────
@@ -87,18 +87,34 @@ async function getEpicAuthFromCookies() {
 }
 
 // ── Save games ────────────────────────────────────────────────────────────
+// Normalize for dedup: strip trademark symbols so "Game™" and "Game" are the same key
+const normKey = t => t.replace(/[™®©]/g, "").toLowerCase().trim();
+// When two titles share a normalized key, prefer the one that has trademark symbols
+const preferRicher = (a, b) => (/[™®©]/.test(b) && !/[™®©]/.test(a)) ? b : a;
+
 async function saveGames(newGames) {
   const result = await chrome.storage.local.get([STORAGE_KEY, "epicIgnoredGames"]);
   const existing = result[STORAGE_KEY] || [];
-  const ignored  = new Set((result.epicIgnoredGames || []).map(g => g.toLowerCase().trim()));
-  const existingSet = new Set(existing.map(g => g.toLowerCase().trim()));
-  const toAdd = newGames.filter(g => {
-    const key = g.toLowerCase().trim();
-    return !existingSet.has(key) && !ignored.has(key);
-  });
-  const merged = [...existing, ...toAdd];
+  const ignored  = new Set((result.epicIgnoredGames || []).map(g => normKey(g)));
+
+  // Build a dedup map from existing (also fixes any pre-existing duplicates)
+  const titleMap = new Map();
+  for (const g of existing) {
+    const key = normKey(g);
+    if (!ignored.has(key)) titleMap.set(key, titleMap.has(key) ? preferRicher(titleMap.get(key), g) : g);
+  }
+
+  let added = 0;
+  for (const g of newGames) {
+    const key = normKey(g);
+    if (ignored.has(key)) continue;
+    if (!titleMap.has(key)) { titleMap.set(key, g); added++; }
+    else titleMap.set(key, preferRicher(titleMap.get(key), g));
+  }
+
+  const merged = [...titleMap.values()];
   await chrome.storage.local.set({ [STORAGE_KEY]: merged, epicLastScan: Date.now() });
-  return { total: merged.length, added: toAdd.length };
+  return { total: merged.length, added };
 }
 
 // ── Shared request headers ────────────────────────────────────────────────
