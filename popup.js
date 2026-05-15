@@ -199,20 +199,20 @@ function renderDismissed() {
     dot.className = "game-dot-muted";
     const name = document.createElement("span");
     name.className = "game-name";
-    name.title = `Steam: ${d.steamTitle}  →  Epic: ${d.epicTitle}`;
-    name.textContent = d.steamTitle;
+    name.title = `Epic match dismissed: "${d.epicTitle}"`;
+    name.textContent = `${d.steamTitle}  ·  ${d.epicTitle}`;
     const restore = document.createElement("button");
     restore.className = "game-restore";
     restore.title = "Restore badge for this game";
     restore.textContent = "↩";
-    restore.addEventListener("click", () => undismiss(d.appId));
+    restore.addEventListener("click", () => undismiss(d.appId, d.epicTitle));
     item.append(dot, name, restore);
     list.appendChild(item);
   });
 }
 
-function undismiss(appId) {
-  allDismissed = allDismissed.filter(d => d.appId !== appId);
+function undismiss(appId, epicTitle) {
+  allDismissed = allDismissed.filter(d => !(d.appId === appId && d.epicTitle === epicTitle));
   chrome.storage.local.set({ [DISMISSED_KEY]: allDismissed }, () => loadData());
 }
 

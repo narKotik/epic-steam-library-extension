@@ -204,12 +204,17 @@
       if (!epicGames || epicGames.length === 0) return;
 
       const dismissed = result[DISMISSED_KEY] || [];
-      if (appId && dismissed.some(d => d.appId === appId)) return;
+      // Exclude only the specific Epic titles dismissed for this page
+      const dismissedTitles = new Set(
+        dismissed.filter(d => d.appId === appId).map(d => d.epicTitle)
+      );
+      const candidates = epicGames.filter(g => !dismissedTitles.has(g));
+      if (candidates.length === 0) return;
 
       const steamTitle = getSteamTitle();
       if (!steamTitle) return;
 
-      const { match, epicTitle, confidence } = isMatch(steamTitle, epicGames);
+      const { match, epicTitle, confidence } = isMatch(steamTitle, candidates);
       if (match) injectBadge(appId, steamTitle, epicTitle, confidence);
     });
   }
