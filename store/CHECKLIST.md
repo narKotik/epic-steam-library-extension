@@ -6,7 +6,7 @@
   One-time $5 registration fee.
 - [ ] Host the privacy policy. Easiest option:  
   Push this repo to GitHub and enable **GitHub Pages** on the `main` branch.  
-  Your policy URL will be: `https://<your-username>.github.io/<repo-name>/store/privacy.html`
+  Your policy URL will be: `https://narkotik.github.io/already-own/store/privacy.html`
 
 ---
 
