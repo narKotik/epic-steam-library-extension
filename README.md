@@ -1,4 +1,4 @@
-# Epic Library on Steam — Chrome Extension
+# Already Own? — Chrome Extension
 
 Cross-library ownership checker. Shows whether you already own a game on Epic or Steam before buying it on the other store.
 

@@ -133,7 +133,7 @@
     }
   });
 
-  console.log("[ELS] v1.4.0 content script ready on", location.hostname);
+  console.log("[AO] v1.4.0 content script ready on", location.hostname);
 
   // ── Badge on Epic store game pages ────────────────────────────────────────
   // Shows when you own the game on Steam or Other (so you don't double-buy on Epic)

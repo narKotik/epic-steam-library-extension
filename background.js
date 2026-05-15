@@ -439,7 +439,7 @@ async function doScan(authFromPage, accountIdFromPage) {
   logs.length = 0;
   const { epicDebugLogs } = await chrome.storage.local.get("epicDebugLogs");
   DEBUG = !!epicDebugLogs;
-  info(`ELS v${VERSION} background scan started`);
+  info(`Already Own? v${VERSION} background scan started`);
   info("Auth token from page?", authFromPage ? `Yes (${authFromPage.length} chars)` : "No");
   info("Account ID from page?", accountIdFromPage ? accountIdFromPage.slice(0, 8) + "..." : "No");
 
@@ -806,7 +806,7 @@ async function doSteamScan() {
   logs.length = 0;
   const { epicDebugLogs } = await chrome.storage.local.get("epicDebugLogs");
   DEBUG = !!epicDebugLogs;
-  info(`ELS v${VERSION} Steam scan started`);
+  info(`Already Own? v${VERSION} Steam scan started`);
 
   const steamId = await getSteamIdFromCookie();
   if (!steamId) throw { message: "Not logged into Steam in Chrome — open store.steampowered.com and sign in.", logs: [...logs] };
@@ -834,7 +834,7 @@ async function doSteamScan() {
 
 // ── Message listener ──────────────────────────────────────────────────────
 chrome.runtime.onInstalled.addListener(() => {
-  console.log(`ELS v${VERSION} installed`);
+  console.log(`Already Own? v${VERSION} installed`);
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
