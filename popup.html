@@ -136,7 +136,7 @@
     <div class="header-name">Epic Library on Steam</div>
     <div class="header-sub">Cross-library ownership checker</div>
   </div>
-  <div class="header-ver">v1.3.4</div>
+  <div class="header-ver">v1.3.5</div>
 </div>
 
 <div class="tabs">
@@ -180,6 +180,18 @@
       <div id="ignored-list"></div>
     </div>
     <div class="ignored-hint">Ignored games are skipped on future scans.<br>↩ restore to library &nbsp;·&nbsp; ✕ remove from this list (may return on next scan)</div>
+  </div>
+  <div id="dismissed-toggle-row" style="display:none; border-top:1px solid var(--border); padding-top:4px;">
+    <button class="btn-ignored-toggle" id="btn-dismissed-toggle">
+      <span>Dismissed Steam matches (<span id="dismissed-count">0</span>)</span>
+      <span id="dismissed-chevron">▸</span>
+    </button>
+  </div>
+  <div id="dismissed-section" style="display:none; flex-direction:column; gap:6px;">
+    <div class="games-list-wrap" style="max-height:150px;">
+      <div id="dismissed-list"></div>
+    </div>
+    <div class="ignored-hint">Steam pages where you clicked ✕ on the badge.<br>↩ restore to show the badge again on that page</div>
   </div>
 </div>
 

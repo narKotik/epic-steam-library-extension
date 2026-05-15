@@ -4,7 +4,8 @@
 (function () {
   "use strict";
 
-  const STORAGE_KEY = "epicOwnedGames";
+  const STORAGE_KEY   = "epicOwnedGames";
+  const DISMISSED_KEY = "epicDismissedMatches";
 
   function escHtml(str) {
     return String(str).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -68,7 +69,7 @@
   }
 
   // ── Inject the "You own this on Epic" badge ───────────────────────────────
-  function injectBadge(epicTitle, confidence) {
+  function injectBadge(appId, steamTitle, epicTitle, confidence) {
     if (document.getElementById("els-epic-badge")) return;
 
     // Find the buy/add-to-cart area
@@ -176,6 +177,15 @@
     document.head.appendChild(style);
 
     badge.querySelector("#els-badge-close").addEventListener("click", () => {
+      if (appId) {
+        chrome.storage.local.get(DISMISSED_KEY, (r) => {
+          const list = r[DISMISSED_KEY] || [];
+          if (!list.some(d => d.appId === appId)) {
+            list.push({ appId, steamTitle, epicTitle });
+            chrome.storage.local.set({ [DISMISSED_KEY]: list });
+          }
+        });
+      }
       badge.style.transition = "opacity 0.3s, transform 0.3s";
       badge.style.opacity = "0";
       badge.style.transform = "scale(0.95)";
@@ -187,17 +197,19 @@
 
   // ── Main: load library and check current game ─────────────────────────────
   function run() {
-    chrome.storage.local.get([STORAGE_KEY], (result) => {
+    const appId = location.pathname.match(/\/app\/(\d+)/)?.[1] || null;
+    chrome.storage.local.get([STORAGE_KEY, DISMISSED_KEY], (result) => {
       const epicGames = result[STORAGE_KEY];
-      if (!epicGames || epicGames.length === 0) return; // no library scanned yet
+      if (!epicGames || epicGames.length === 0) return;
+
+      const dismissed = result[DISMISSED_KEY] || [];
+      if (appId && dismissed.some(d => d.appId === appId)) return;
 
       const steamTitle = getSteamTitle();
       if (!steamTitle) return;
 
       const { match, epicTitle, confidence } = isMatch(steamTitle, epicGames);
-      if (match) {
-        injectBadge(epicTitle, confidence);
-      }
+      if (match) injectBadge(appId, steamTitle, epicTitle, confidence);
     });
   }
 

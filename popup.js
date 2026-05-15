@@ -1,7 +1,8 @@
 // popup.js v1.3.0
 
-const STORAGE_KEY = "epicOwnedGames";
-const IGNORE_KEY  = "epicIgnoredGames";
+const STORAGE_KEY    = "epicOwnedGames";
+const IGNORE_KEY     = "epicIgnoredGames";
+const DISMISSED_KEY  = "epicDismissedMatches";
 
 const btnScan      = document.getElementById("btn-scan");
 const btnClear     = document.getElementById("btn-clear");
@@ -24,9 +25,10 @@ const btnImport       = document.getElementById("btn-import");
 const importFile      = document.getElementById("import-file");
 const libIoStatus     = document.getElementById("lib-io-status");
 
-let allGames   = [];
-let allIgnored = [];
-let storedLogs = [];
+let allGames     = [];
+let allIgnored   = [];
+let allDismissed = [];
+let storedLogs   = [];
 let hasAuth    = false;
 let initialLoad = true;
 
@@ -69,11 +71,12 @@ function timeAgo(ts) {
 
 // ── Library ───────────────────────────────────────────────────────────────
 function loadData() {
-  chrome.storage.local.get([STORAGE_KEY, IGNORE_KEY, "epicLastScan"], (result) => {
-    const rawGames   = result[STORAGE_KEY] || [];
-    const rawIgnored = result[IGNORE_KEY]  || [];
-    allGames   = deduplicateList(rawGames);
-    allIgnored = deduplicateList(rawIgnored);
+  chrome.storage.local.get([STORAGE_KEY, IGNORE_KEY, DISMISSED_KEY, "epicLastScan"], (result) => {
+    const rawGames   = result[STORAGE_KEY]   || [];
+    const rawIgnored = result[IGNORE_KEY]    || [];
+    allGames     = deduplicateList(rawGames);
+    allIgnored   = deduplicateList(rawIgnored);
+    allDismissed = result[DISMISSED_KEY] || [];
     // Persist cleanup if dedup removed anything
     if (allGames.length !== rawGames.length || allIgnored.length !== rawIgnored.length) {
       chrome.storage.local.set({ [STORAGE_KEY]: allGames, [IGNORE_KEY]: allIgnored });
@@ -81,6 +84,7 @@ function loadData() {
     statScan.textContent = timeAgo(result.epicLastScan);
     renderLibrary(libSearch.value);
     renderIgnored();
+    renderDismissed();
     if (initialLoad) {
       initialLoad = false;
       if (allGames.length === 0) switchTab("scan");
@@ -167,6 +171,54 @@ function renderIgnored() {
 document.getElementById("btn-ignored-toggle").addEventListener("click", () => {
   const section = document.getElementById("ignored-section");
   const chevron = document.getElementById("ignored-chevron");
+  const open = section.style.display === "flex";
+  section.style.display = open ? "none" : "flex";
+  chevron.textContent   = open ? "▸" : "▾";
+});
+
+function renderDismissed() {
+  const toggleRow = document.getElementById("dismissed-toggle-row");
+  const section   = document.getElementById("dismissed-section");
+  const countEl   = document.getElementById("dismissed-count");
+  const list      = document.getElementById("dismissed-list");
+
+  countEl.textContent = allDismissed.length;
+  if (allDismissed.length === 0) {
+    toggleRow.style.display = "none";
+    section.style.display   = "none";
+    return;
+  }
+  toggleRow.style.display = "block";
+
+  const sorted = allDismissed.slice().sort((a, b) => a.steamTitle.localeCompare(b.steamTitle));
+  list.innerHTML = "";
+  sorted.forEach(d => {
+    const item = document.createElement("div");
+    item.className = "game-item";
+    const dot = document.createElement("div");
+    dot.className = "game-dot-muted";
+    const name = document.createElement("span");
+    name.className = "game-name";
+    name.title = `Steam: ${d.steamTitle}  →  Epic: ${d.epicTitle}`;
+    name.textContent = d.steamTitle;
+    const restore = document.createElement("button");
+    restore.className = "game-restore";
+    restore.title = "Restore badge for this game";
+    restore.textContent = "↩";
+    restore.addEventListener("click", () => undismiss(d.appId));
+    item.append(dot, name, restore);
+    list.appendChild(item);
+  });
+}
+
+function undismiss(appId) {
+  allDismissed = allDismissed.filter(d => d.appId !== appId);
+  chrome.storage.local.set({ [DISMISSED_KEY]: allDismissed }, () => loadData());
+}
+
+document.getElementById("btn-dismissed-toggle").addEventListener("click", () => {
+  const section = document.getElementById("dismissed-section");
+  const chevron = document.getElementById("dismissed-chevron");
   const open = section.style.display === "flex";
   section.style.display = open ? "none" : "flex";
   chevron.textContent   = open ? "▸" : "▾";
