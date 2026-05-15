@@ -27,7 +27,6 @@ const chkDebugLogs   = document.getElementById("chk-debug-logs");
 const libSearchClear = document.getElementById("lib-search-clear");
 const btnExport      = document.getElementById("btn-export");
 const btnImport      = document.getElementById("btn-import");
-const importFile     = document.getElementById("import-file");
 const libIoStatus    = document.getElementById("lib-io-status");
 const scanDesc       = document.getElementById("scan-desc");
 const steamScanDesc  = document.getElementById("steam-scan-desc");
@@ -326,62 +325,9 @@ btnExport.addEventListener("click", () => {
   setLibStatus(`Exported ${allGames.length} games, ${allIgnored.length} ignored`);
 });
 
-btnImport.addEventListener("click", () => importFile.click());
-
-importFile.addEventListener("change", () => {
-  const file = importFile.files[0];
-  if (!file) return;
-  importFile.value = "";
-  if (file.size > 5 * 1024 * 1024) { setLibStatus("File too large (max 5 MB)", "err"); return; }
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const data = JSON.parse(e.target.result);
-      if (!Array.isArray(data.games) && !Array.isArray(data.ignored)) throw new Error();
-      // Accept v1 strings or v2 {title,source} objects; sanitize both
-      const sanitizeEntry = g => {
-        if (typeof g === "string" && g.length > 0 && g.length <= 300) {
-          return { title: g, source: "other" };
-        }
-        if (g && typeof g === "object" && typeof g.title === "string" && g.title.length > 0 && g.title.length <= 300) {
-          const src = ["epic", "steam", "other"].includes(g.source) ? g.source : "other";
-          return { title: g.title, source: src };
-        }
-        return null;
-      };
-      const sanitize = arr => (arr || []).map(sanitizeEntry).filter(Boolean).slice(0, 10000);
-      const newGames   = sanitize(data.games);
-      const newIgnored = sanitize(data.ignored);
-      const mergedGames   = deduplicateList([...allGames,   ...newGames]);
-      const mergedIgnored = deduplicateList([...allIgnored, ...newIgnored]);
-      const ignoredKeys   = new Set(mergedIgnored.map(g => normKey(g.title)));
-      // Remove "other" entries whose title already exists under "steam"/"epic" to prevent
-      // v1-format imports from creating duplicate entries alongside source-specific ones.
-      const specificTitles = new Set(
-        mergedGames.filter(g => g.source === "steam" || g.source === "epic").map(g => normKey(g.title))
-      );
-      const dedupedGames = mergedGames.filter(g =>
-        g.source !== "other" || !specificTitles.has(normKey(g.title))
-      );
-      const finalGames = dedupedGames.filter(g => !ignoredKeys.has(normKey(g.title)));
-      const existingKeys = new Set(allGames.map(g => normKey(g.title) + ":" + g.source));
-      const addedCount = finalGames.filter(g => !existingKeys.has(normKey(g.title) + ":" + g.source)).length;
-      chrome.storage.local.set({ [LIBRARY_KEY]: finalGames, [IGNORE_KEY]: mergedIgnored }, () => {
-        if (chrome.runtime.lastError) {
-          setLibStatus("Save failed: " + chrome.runtime.lastError.message, "err");
-          return;
-        }
-        loadData();
-        const ignoredMsg = newIgnored.length ? `, ${newIgnored.length} ignored` : "";
-        setLibStatus(addedCount > 0
-          ? `${addedCount} games added (${finalGames.length} total)${ignoredMsg}`
-          : `No new games — library has ${finalGames.length}${ignoredMsg}`, "ok");
-      });
-    } catch {
-      setLibStatus("Invalid file", "err");
-    }
-  };
-  reader.readAsText(file);
+// Import opens a dedicated tab so the OS file-picker doesn't close the extension popup.
+btnImport.addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("importer.html") });
 });
 
 // ── Logs ──────────────────────────────────────────────────────────────────
@@ -579,6 +525,14 @@ chkDebugLogs.addEventListener("change", () => {
 
 // ── Init ──────────────────────────────────────────────────────────────────
 loadData();
+
+// Refresh library if the importer tab writes new data while the popup is open.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && (LIBRARY_KEY in changes || IGNORE_KEY in changes)) {
+    loadData();
+    setLibStatus("Library updated from import", "ok");
+  }
+});
 setInterval(() => {
   chrome.storage.local.get(["epicLastScan", "steamLastScan"], r => {
     statScan.textContent      = timeAgo(r.epicLastScan);
