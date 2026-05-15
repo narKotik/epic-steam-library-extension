@@ -1,0 +1,55 @@
+──────────────────────────────────────────────────
+CHROME WEB STORE — STORE LISTING COPY
+Extension: Already Own?
+──────────────────────────────────────────────────
+
+SHORT DESCRIPTION  (≤132 chars — goes in manifest.json)
+────────────────────────────────────────────────────────
+Shows your Epic and Steam libraries on store pages so you never buy a game you already own. Scans both Epic and Steam.
+
+
+DETAILED DESCRIPTION  (paste into the store listing text box)
+──────────────────────────────────────────────────────────────
+Already Own? is a cross-library ownership checker. It scans your Steam and Epic Games libraries and shows a badge on store pages when you're about to buy something you already own.
+
+── HOW IT WORKS ──
+
+1. Open the popup → Scan tab → click Scan Steam Library or Scan Epic Library.
+2. The extension reads your owned games in the background (no manual steps needed for Steam).
+3. Browse store pages normally. A badge appears above the buy button whenever a match is found.
+
+The badge shows the matched title, source (Steam or Epic), and confidence level:
+• Exact match — normalized titles are identical
+• Title match — one title contains the other (handles subtitles)
+• Likely match — ≥75% word overlap
+
+── FEATURES ──
+
+• Steam library scan — reads your full game list from your Steam Community profile page (fast, no API limits)
+• Epic library scan — reads your owned games via the Epic Games Store
+• Badges on Steam store pages — shows "You already own this on Epic!" when browsing steam store pages
+• Badges on Epic store pages — shows "You already own this on Steam!" when browsing Epic store pages
+• Fuzzy title matching — handles punctuation differences, trademark symbols, subtitles, regional name variants
+• Manual library — add games the scanner missed
+• Ignore list — dismiss false positives permanently; they're skipped on future scans
+• Export / Import — back up and restore your library as a JSON file
+• 100% local — all data stored on your device, never transmitted anywhere
+
+── PRIVACY ──
+
+No data leaves your computer. Ever. The extension uses chrome.storage.local to save your game list. It makes API calls to Steam and Epic only during a scan, using your existing browser session — the same requests your browser already makes when you visit those sites.
+
+No accounts, no sign-in, no analytics, no tracking.
+
+── PERMISSIONS EXPLAINED ──
+
+• storage — save your game library and settings locally in Chrome
+• scripting — inject the ownership badge onto store pages
+• tabs — open a temporary background tab to read your Steam games list (closed immediately after scanning)
+• cookies — read your existing Steam/Epic session to authenticate scan requests; never stored or transmitted
+
+
+──────────────────────────────────────────────────
+CATEGORY:     Productivity
+LANGUAGE:     English
+──────────────────────────────────────────────────
