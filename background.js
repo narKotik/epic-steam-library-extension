@@ -579,13 +579,25 @@ async function fetchNamesFromProfilePage(steamId) {
 }
 
 // ── Steam scan via store.steampowered.com ─────────────────────────────────
-// Step 1: dynamicstore/userdata/ → owned app IDs
-// Step 2a: ISteamApps/GetAppList from service worker (Valve may 404 extension origins)
-// Step 2b/2c: relay GetAppList through a Steam Store tab (page origin bypasses the block)
-// Step 2d: DOM scrape the user's Steam Community profile games page
-// Step 3: appdetails for any IDs not covered above (paced to avoid rate limiting)
+// Step 1: DOM scrape the user's Steam Community profile games page (primary path)
+// Step 2: dynamicstore/userdata/ → owned app IDs (fallback path only)
+// Step 3a: ISteamApps/GetAppList from service worker
+// Step 3b/3c: relay GetAppList through a Steam Store tab (page origin bypasses any block)
+// Step 4: appdetails for any IDs not covered above (paced to avoid rate limiting)
 async function fetchSteamViaStoreApi(steamId) {
-  info("Step 1: store.steampowered.com/dynamicstore/userdata");
+  // Step 1: profile page DOM scrape — fast, returns complete game names, no API rate limits.
+  // This is the primary path; when it returns names we skip all subsequent API calls.
+  info("Step 1: Steam Community profile page DOM scrape");
+  const profilePageNames = await fetchNamesFromProfilePage(steamId);
+  if (profilePageNames && profilePageNames.length > 50) {
+    info(`Profile page: ${profilePageNames.length} names — scan complete`);
+    return profilePageNames;
+  }
+  if (profilePageNames) info(`Profile page: only ${profilePageNames.length} names — continuing with API fallback`);
+  else info("Profile page: no names (private profile or network error) — continuing with API fallback");
+
+  // Step 2: get owned app IDs (needed only for the API fallback path below)
+  info("Step 2: store.steampowered.com/dynamicstore/userdata");
   const udResp = await fetch("https://store.steampowered.com/dynamicstore/userdata/", {
     credentials: "include",
     headers: { "Accept": "application/json, */*" },
@@ -606,7 +618,7 @@ async function fetchSteamViaStoreApi(steamId) {
   // nameMap: appid (number) → name string — persists across all resolution steps
   const nameMap = new Map();
 
-  // Step 2a: try GetAppList directly from the service worker
+  // Step 3a: try GetAppList directly from the service worker
   const appListUrls = [
     "https://api.steampowered.com/ISteamApps/GetAppList/v0002/?format=json",
     "https://api.steampowered.com/ISteamApps/GetAppList/v2/?format=json",
@@ -615,7 +627,7 @@ async function fetchSteamViaStoreApi(steamId) {
   let getAppListWorked = false;
   for (const url of appListUrls) {
     try {
-      info("Step 2a: GetAppList", url);
+      info("Step 3a: GetAppList", url);
       const r = await fetch(url);
       info("GetAppList HTTP status", r.status);
       if (!r.ok) continue;
@@ -633,7 +645,7 @@ async function fetchSteamViaStoreApi(steamId) {
     } catch (e) { warn("GetAppList attempt failed", e.message); }
   }
 
-  // Step 2b/2c: relay GetAppList through a Steam Store page context.
+  // Step 3b/3c: relay GetAppList through a Steam Store page context.
   // Scripts in MAIN world run with the page's origin; api.steampowered.com accepts that origin
   // but returns 404 for Chrome-extension service-worker origins.
   if (!getAppListWorked) {
@@ -670,13 +682,13 @@ async function fetchSteamViaStoreApi(steamId) {
     const existingTabs = await chrome.tabs.query({ url: "https://store.steampowered.com/*" });
     if (existingTabs.length > 0) {
       relayTabId = existingTabs[0].id;
-      info(`Step 2b: relaying GetAppList via existing tab (id=${relayTabId})`);
+      info(`Step 3b: relaying GetAppList via existing tab (id=${relayTabId})`);
     }
 
     // 2c: no tab open — create a silent background tab, use it, then close it
     let bgTab = null;
     if (relayTabId === null) {
-      info("Step 2c: opening temporary background Steam tab for GetAppList relay");
+      info("Step 3c: opening temporary background Steam tab for GetAppList relay");
       try {
         bgTab = await chrome.tabs.create({ url: "https://store.steampowered.com/", active: false });
         relayTabId = bgTab.id;
@@ -727,29 +739,14 @@ async function fetchSteamViaStoreApi(steamId) {
     }
   }
 
-  // Step 2d: DOM scrape the user's Steam Community profile games page.
-  // Completely bypasses the API rate-limit and 404 issues — the page lists all owned games.
-  // If it returns enough names we skip the slow appdetails loop entirely.
-  let profilePageNames = null;
-  if (!getAppListWorked) {
-    profilePageNames = await fetchNamesFromProfilePage(steamId);
-    if (profilePageNames && profilePageNames.length > 50) {
-      info(`Profile page: ${profilePageNames.length} names — skipping appdetails fallback`);
-      const combined = [...new Set([...nameMap.values(), ...profilePageNames])].filter(Boolean);
-      info(`Resolved ${combined.length} names from ${ownedSet.size} owned IDs`);
-      return combined.length > 0 ? combined : null;
-    }
-    if (profilePageNames) info(`Profile page returned only ${profilePageNames.length} names — continuing to appdetails`);
-  }
-
-  // Step 3: appdetails for any IDs still unresolved.
+  // Step 4: appdetails for any IDs still unresolved.
   // Steam rate-limits around request ~300-450; strategy:
   //   - 100 ms between batches (slows burst rate, helps early range)
   //   - 20 s strategic pause every 300 requests (resets the sliding window)
   //   - retry on explicit 429
   const unresolvedIds = ownedIds.filter(id => !nameMap.has(id));
   if (unresolvedIds.length > 0) {
-    info(`Step 3: appdetails for ${unresolvedIds.length} unresolved IDs`);
+    info(`Step 4: appdetails for ${unresolvedIds.length} unresolved IDs`);
     const PARALLEL = 15;
     let i = 0;
     while (i < unresolvedIds.length) {
@@ -799,7 +796,7 @@ async function fetchSteamViaStoreApi(steamId) {
     }
   }
 
-  const names = [...new Set([...nameMap.values(), ...(profilePageNames || [])])].filter(Boolean);
+  const names = [...nameMap.values()].filter(Boolean);
   info(`Resolved ${names.length} names from ${ownedSet.size} owned IDs`);
   return names.length > 0 ? names : null;
 }

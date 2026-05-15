@@ -161,15 +161,6 @@
       <button class="lib-search-clear" id="lib-search-clear" title="Clear search">✕</button>
     </div>
   </div>
-  <div class="lib-add-row">
-    <input class="lib-add-input" id="lib-add-input" placeholder="Add game manually…" autocomplete="off" />
-    <select class="lib-add-source" id="lib-add-source">
-      <option value="epic">Epic</option>
-      <option value="steam">Steam</option>
-      <option value="other" selected>Other</option>
-    </select>
-    <button class="btn-add" id="btn-add-game">+ Add</button>
-  </div>
   <div class="games-list-wrap">
     <div id="games-list"><div class="empty-state">No games saved yet.<br>Go to Scan tab to import your library.</div></div>
   </div>
@@ -210,6 +201,15 @@
 
 <!-- SCAN TAB -->
 <div class="panel" id="tab-scan">
+  <div class="lib-add-row">
+    <input class="lib-add-input" id="lib-add-input" placeholder="Add game manually…" autocomplete="off" />
+    <select class="lib-add-source" id="lib-add-source">
+      <option value="epic">Epic</option>
+      <option value="steam">Steam</option>
+      <option value="other" selected>Other</option>
+    </select>
+    <button class="btn-add" id="btn-add-game">+ Add</button>
+  </div>
   <div class="step">
     <div class="step-header"><div class="step-num">1</div><div class="step-title">Scan Epic Library</div></div>
     <div class="step-desc" id="scan-desc">Checking Epic session…</div>
@@ -222,7 +222,7 @@
   <div class="step">
     <div class="step-header"><div class="step-num">2</div><div class="step-title">Scan Steam Library</div></div>
     <div class="step-desc" id="steam-scan-desc">Checking Steam session…</div>
-    <button class="btn btn-secondary" id="btn-steam-scan" disabled>
+    <button class="btn btn-primary" id="btn-steam-scan" disabled>
       <div class="spinner" id="steam-spinner"></div>
       <span id="steam-label">…</span>
     </button>

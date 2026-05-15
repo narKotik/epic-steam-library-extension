@@ -1,103 +1,99 @@
 # Epic Library on Steam — Chrome Extension
 
-Shows your Epic Games library directly on Steam store pages so you never accidentally buy a game you already own.
+Cross-library ownership checker. Shows whether you already own a game on Epic or Steam before buying it on the other store.
 
 ## Features
 
-- **📚 Epic Library Scanner** — Reads your owned games from the Epic Games Store library page
-- **🏷️ Steam Badges** — Shows a "You already own this on Epic!" badge near the buy button on Steam app pages
-- **🔍 Fuzzy Matching** — Handles title differences (subtitles, punctuation, etc.)
+- **📚 Epic Library Scanner** — Reads your owned games from the Epic Games Store
+- **🎮 Steam Library Scanner** — Reads your full Steam library via your Community profile page
+- **🏷️ Store Badges** — Shows a "You already own this!" badge near the buy button on Steam and Epic store pages
+- **🔍 Fuzzy Matching** — Handles title differences (subtitles, punctuation, trademark symbols, etc.)
+- **📥 Export / Import** — Back up and restore your library as a JSON file
 - **🔒 100% Local** — All data stored on your device via `chrome.storage.local`. No servers, no tracking.
 
 ## Installation (Developer Mode)
 
-1. Clone or download this repo — you'll get a folder called `epic-steam-library-extension`
+1. Clone or download this repo
 2. Open Chrome and go to `chrome://extensions/`
 3. Enable **Developer mode** (toggle in the top-right)
-4. Click **Load unpacked**
-5. Select the `epic-steam-library-extension` folder
-6. The extension icon appears in your toolbar ✅
+4. Click **Load unpacked** → select this folder
+5. The extension icon appears in your toolbar ✅
 
 ## How to Use
 
-### Step 1 — Scan your Epic library
-1. Click the extension icon in Chrome
-2. Click **"Open Epic Library"** (or navigate there manually)
-3. Log into Epic Games Store if needed
-4. Wait for your library games to load on screen (scroll down to load more)
-5. Click **"🎮 Scan Epic Library"** in the popup
-6. Your games are saved locally — you'll see the count in the popup
+### Scan your Epic library
+1. Open [store.epicgames.com](https://store.epicgames.com) and sign in
+2. Navigate to your library and scroll to the bottom (Epic lazy-loads)
+3. Open the extension popup → **Scan** tab → click **Scan Epic Library**
 
-### Step 2 — Browse Steam
-Just visit any game on the Steam store (`store.steampowered.com/app/...`). If you own the game on Epic, a blue badge appears **above the buy button** automatically.
+### Scan your Steam library
+1. Open [store.steampowered.com](https://store.steampowered.com) and sign in
+2. Open the extension popup → **Scan** tab → click **Scan Steam Library**
+3. The extension opens your Steam Community games page in a background tab, scrolls through the full list, and closes it automatically
+
+> **Note:** Scanning your Steam library opens a temporary background tab on `steamcommunity.com`. If your Steam profile games list is set to **private**, the scan will fall back to a slower Steam API method. Make sure your game details are set to public for best results.
+
+> **Warning:** Running Steam store scans very frequently (the slower API fallback path) may result in a temporary block on `store.steampowered.com/api/appdetails` requests. If badge lookups on Steam stop working, wait a few minutes for the block to lift.
+
+### Browse stores
+Visit any game page on `store.steampowered.com/app/…` or `store.epicgames.com/p/…`. If you own the game in your other library, a badge appears above the buy button automatically.
 
 ## Tips
 
-- **Scroll your Epic library** before scanning to load all games (Epic uses lazy loading)
-- Re-scan periodically when you add new Epic games
+- Re-scan after buying new games to keep the list up to date
 - The badge shows match confidence: **Exact match**, **Title match**, or **Likely match**
-- Click the ✕ on the badge to dismiss it for that page session
+- Click **✕** on a badge to dismiss it permanently for that page
+- Use **Add game manually** (top of Scan tab) to add games the scanner missed
 
 ## How Title Matching Works
 
-The extension normalizes titles (removes punctuation, symbols, extra spaces) and uses three levels of matching:
+Titles are normalized (trademark symbols removed, punctuation stripped, whitespace collapsed) and matched at three levels:
+
 1. **Exact** — normalized titles are identical
-2. **Partial** — one title contains the other (handles "Game Name: Subtitle" vs "Game Name")
-3. **Fuzzy** — 75%+ word overlap between titles
+2. **Partial** — one title contains the other (handles "Game: Subtitle" vs "Game")
+3. **Fuzzy** — ≥75% word overlap (words longer than 2 characters)
+
+## Managing Your Library
+
+From the **Library** tab you can:
+
+- **Search** your saved games
+- **Ignore** false positives (✕ next to a game) — moves them to the ignore list and skips them on future scans
+- **Restore** ignored games (↩) back to your library
+- **Delete** from the ignore list permanently (the game may reappear on the next scan)
+
+### Ignore list
+
+Ignored games are hidden from the badge and skipped on all future scans. Use ↩ to restore, or ✕ to permanently remove (after which the next scan treats them as new).
+
+### Export / Import
+
+Use **↑ Export library** and **↓ Import library** (Scan tab) to back up and restore your game list as a JSON file. Import merges with your existing library without creating duplicates.
+
+## Troubleshooting
+
+Enable **Debug logs** (checkbox at the bottom of the popup), run a scan, then open the **Logs** tab. The log shows which method was used, how many games were found, and any errors. Use **Copy** to share the log when reporting an issue.
 
 ## File Structure
 
 ```
-epic-steam-library-extension/
 ├── manifest.json       # Extension config (Manifest V3)
-├── background.js       # Service worker
-├── content_epic.js     # Runs on epicgames.com — scans library
-├── content_steam.js    # Runs on steampowered.com — injects badge
-├── popup.html          # Extension popup UI
-├── popup.js            # Popup logic
-├── icons/
-│   ├── icon16.png
-│   ├── icon48.png
-│   └── icon128.png
-└── README.md
+├── background.js       # Service worker — all network requests happen here
+├── content_epic.js     # Runs on epicgames.com — auth extraction + Epic store badge
+├── content_steam.js    # Runs on steampowered.com — Steam store badge
+├── popup.html / popup.js  # Extension popup UI
+├── importer.html / importer.js  # Dedicated import tab (avoids popup-closes-on-file-picker)
+└── icons/
 ```
-
-## Managing your library
-
-The scan reads Epic's API and **may include games you don't fully own** — DLC routes, cross-compatible content, or internal catalog entries you can't actually play as standalone games. It may also **miss some titles** that Epic's API doesn't expose.
-
-You can correct the list at any time from the **Library tab**:
-
-- **Add** games the scan missed using the "Add game manually…" field
-- **Ignore** false positives — click ✕ next to a game to move it to the ignore list
-- **Restore** an ignored game back to your library, or permanently delete it from the ignore list
-
-### Ignore list
-
-The ignore list lets you clean up false positives without losing them permanently. Ignored games:
-- are hidden from your main library
-- are skipped on all future scans (won't reappear automatically)
-- can be restored to your library at any time via the ↩ button in the Ignored section
-- can be permanently removed from the ignore list via ✕ — after that, the next scan will treat them like new games again
-
-## Troubleshooting
-
-If a scan returns 0 games or fewer games than expected, enable **Debug logs** to see exactly what's happening:
-
-1. Open the extension popup
-2. At the bottom, check the **Debug logs** checkbox
-3. Run the scan again
-4. The **Logs** tab will appear — open it to see detailed output
-
-The logs show which API method was used, how many records were returned, and any errors encountered. You can copy the full log with the **Copy** button to share when reporting an issue.
 
 ## Limitations
 
-- Free games claimed from Epic (weekly giveaways) appear in your library and will be detected
-- Games with very different names on Epic vs Steam may not be matched (e.g. regional title differences)
-- **DLC is listed separately** — Epic's API returns DLC packs as individual entries, so your library count will often be higher than the number of base games shown in the Epic launcher. This is expected behaviour. Use the ignore list to hide any DLC entries you don't want cluttering your list.
-- Some entries in Epic's API may be compatibility records or internal catalog items rather than owned base games
+- **DLC appears as separate entries** — Epic's API returns DLC packs as individual items, so your count will often be higher than the base game count in the launcher. Use the ignore list to hide DLC.
+- **Private Steam profile** — if your Steam games list is private, the fast profile-page scan falls back to the slower `appdetails` API, which is rate-limited.
+- **Steam scan rate limit** — the `appdetails` API fallback (used when the profile page is private) is rate-limited by Steam. Scanning too frequently may temporarily block those requests. If Steam store pages stop loading correctly, wait a few minutes.
+- **Title mismatches** — games with very different names on Epic vs Steam (regional differences, publisher renames) may not match.
+- **Epic lazy-loading** — scroll to the bottom of your Epic library before scanning so all titles are loaded into the page.
 
 ## Privacy
 
-No data ever leaves your computer. The extension only uses `chrome.storage.local` to persist your game list between browser sessions.
+No data ever leaves your computer. The extension uses only `chrome.storage.local` to persist your game list between sessions.
