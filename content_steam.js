@@ -49,7 +49,8 @@
         }
       }
 
-      if (confidence && (!best || RANK[confidence] > RANK[best.confidence])) {
+      if (confidence && (!best || RANK[confidence] > RANK[best.confidence] ||
+          (confidence === best.confidence && en.length > normalize(best.epicTitle).length))) {
         best = { match: true, epicTitle: et, confidence };
         if (confidence === "exact") break; // can't do better
       }
