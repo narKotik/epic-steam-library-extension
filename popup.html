@@ -35,6 +35,12 @@
     .game-restore:hover { color: var(--green); background: rgba(63,185,80,.1); }
     .game-dot-muted { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); flex-shrink: 0; opacity: .5; }
 
+    /* Source badges */
+    .src-badge { display:inline-block; font-size:9px; font-weight:700; padding:1px 5px; border-radius:3px; text-transform:uppercase; letter-spacing:.04em; flex-shrink:0; }
+    .src-epic  { background:rgba(0,120,242,.18); color:#67b0ff; }
+    .src-steam { background:rgba(103,193,245,.18); color:#67c1f5; }
+    .src-other { background:rgba(110,118,129,.18); color:#8b949e; }
+
     /* Tabs */
     .tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); }
     .tab { flex: 1; padding: 9px 4px; text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; letter-spacing: .03em; text-transform: uppercase; }
@@ -75,6 +81,8 @@
     .lib-add-input { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:7px 9px; color:var(--text); font-size:12px; font-family:inherit; outline:none; }
     .lib-add-input::placeholder { color:var(--muted); }
     .lib-add-input:focus { border-color: var(--epic); }
+    .lib-add-source { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:7px 5px; color:var(--text); font-size:11px; font-family:inherit; outline:none; cursor:pointer; }
+    .lib-add-source:focus { border-color:var(--epic); }
     .btn-add { padding:7px 12px; border-radius:6px; background:var(--epic); color:#fff; border:none; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
     .btn-add:hover { background:var(--epic-dark); }
     .games-list-wrap { max-height: 230px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
@@ -136,7 +144,7 @@
     <div class="header-name">Epic Library on Steam</div>
     <div class="header-sub">Cross-library ownership checker</div>
   </div>
-  <div class="header-ver">v1.3.8</div>
+  <div class="header-ver">v1.4.0</div>
 </div>
 
 <div class="tabs">
@@ -155,6 +163,11 @@
   </div>
   <div class="lib-add-row">
     <input class="lib-add-input" id="lib-add-input" placeholder="Add game manually…" autocomplete="off" />
+    <select class="lib-add-source" id="lib-add-source">
+      <option value="epic">Epic</option>
+      <option value="steam">Steam</option>
+      <option value="other" selected>Other</option>
+    </select>
     <button class="btn-add" id="btn-add-game">+ Add</button>
   </div>
   <div class="games-list-wrap">
@@ -183,7 +196,7 @@
   </div>
   <div id="dismissed-toggle-row" style="display:none; border-top:1px solid var(--border); padding-top:4px;">
     <button class="btn-ignored-toggle" id="btn-dismissed-toggle">
-      <span>Dismissed Steam matches (<span id="dismissed-count">0</span>)</span>
+      <span>Dismissed matches (<span id="dismissed-count">0</span>)</span>
       <span id="dismissed-chevron">▸</span>
     </button>
   </div>
@@ -191,20 +204,29 @@
     <div class="games-list-wrap" style="max-height:150px;">
       <div id="dismissed-list"></div>
     </div>
-    <div class="ignored-hint">Steam pages where you clicked ✕ on the badge.<br>↩ restore to show the badge again on that page</div>
+    <div class="ignored-hint">Pages where you clicked ✕ on the badge.<br>↩ restore to show the badge again on that page</div>
   </div>
 </div>
 
 <!-- SCAN TAB -->
 <div class="panel" id="tab-scan">
   <div class="step">
-    <div class="step-header"><div class="step-num">1</div><div class="step-title">Scan Your Library</div></div>
+    <div class="step-header"><div class="step-num">1</div><div class="step-title">Scan Epic Library</div></div>
     <div class="step-desc" id="scan-desc">Checking Epic session…</div>
     <button class="btn btn-primary" id="btn-scan" disabled>
       <div class="spinner" id="scan-spinner"></div>
       <span id="scan-label">…</span>
     </button>
     <div class="scan-meta">Last scan: <span id="stat-scan">—</span></div>
+  </div>
+  <div class="step">
+    <div class="step-header"><div class="step-num">2</div><div class="step-title">Scan Steam Library</div></div>
+    <div class="step-desc" id="steam-scan-desc">Checking Steam session…</div>
+    <button class="btn btn-secondary" id="btn-steam-scan" disabled>
+      <div class="spinner" id="steam-spinner"></div>
+      <span id="steam-label">…</span>
+    </button>
+    <div class="scan-meta">Last scan: <span id="stat-steam-scan">—</span></div>
   </div>
   <div id="status"></div>
   <div class="lib-actions">

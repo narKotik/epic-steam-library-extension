@@ -1,9 +1,10 @@
-// background.js v1.2.0
+// background.js v1.4.0
 // ALL network requests happen here — service workers are not subject to CORS.
 // The content script just grabs auth tokens from the page and sends them here.
 
-const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.3.8";
+const LIBRARY_KEY = "elsLibrary";   // [{title, source}]  source: "epic"|"steam"|"other"
+const IGNORE_KEY  = "elsIgnoredGames"; // [{title, source}]
+const VERSION = "1.4.0";
 let DEBUG = false; // set true (or via Debug logs checkbox in popup) to enable full title-list dumps
 
 // ── Logger ────────────────────────────────────────────────────────────────
@@ -81,34 +82,54 @@ async function getEpicAuthFromCookies() {
 }
 
 // ── Save games ────────────────────────────────────────────────────────────
-// Normalize for dedup: strip trademark symbols so "Game™" and "Game" are the same key
-const normKey = t => t.replace(/[™®©]/g, "").toLowerCase().trim();
-// When two titles share a normalized key, prefer the one that has trademark symbols
+const normKey     = t => t.replace(/[™®©]/g, "").toLowerCase().trim();
 const preferRicher = (a, b) => (/[™®©]/.test(b) && !/[™®©]/.test(a)) ? b : a;
 
-async function saveGames(newGames) {
-  const result = await chrome.storage.local.get([STORAGE_KEY, "epicIgnoredGames"]);
-  const existing = result[STORAGE_KEY] || [];
-  const ignored  = new Set((result.epicIgnoredGames || []).map(g => normKey(g)));
+// titles: string[]   source: "epic" | "steam" | "other"
+async function saveGames(titles, source) {
+  const result = await chrome.storage.local.get([LIBRARY_KEY, IGNORE_KEY]);
+  const existing = result[LIBRARY_KEY] || [];
+  // Ignore is title-only (source-agnostic): an ignored title is skipped from all sources
+  const ignored  = new Set((result[IGNORE_KEY] || []).map(g => normKey(g.title ?? g)));
 
-  // Build a dedup map from existing (also fixes any pre-existing duplicates)
+  // Build dedup map: "normtitle:source" → {title, source}  (also fixes pre-existing dupes)
   const titleMap = new Map();
   for (const g of existing) {
-    const key = normKey(g);
-    if (!ignored.has(key)) titleMap.set(key, titleMap.has(key) ? preferRicher(titleMap.get(key), g) : g);
+    const k = normKey(g.title) + ":" + g.source;
+    if (!ignored.has(normKey(g.title)))
+      titleMap.set(k, titleMap.has(k) ? { ...g, title: preferRicher(titleMap.get(k).title, g.title) } : g);
   }
 
   let added = 0;
-  for (const g of newGames) {
-    const key = normKey(g);
-    if (ignored.has(key)) continue;
-    if (!titleMap.has(key)) { titleMap.set(key, g); added++; }
-    else titleMap.set(key, preferRicher(titleMap.get(key), g));
+  for (const title of titles) {
+    if (ignored.has(normKey(title))) continue;
+    const k = normKey(title) + ":" + source;
+    if (!titleMap.has(k)) { titleMap.set(k, { title, source }); added++; }
+    else titleMap.set(k, { source, title: preferRicher(titleMap.get(k).title, title) });
   }
 
   const merged = [...titleMap.values()];
-  await chrome.storage.local.set({ [STORAGE_KEY]: merged, epicLastScan: Date.now() });
-  return { total: merged.length, added };
+  const scanKey = source === "steam" ? "steamLastScan" : "epicLastScan";
+  await chrome.storage.local.set({ [LIBRARY_KEY]: merged, [scanKey]: Date.now() });
+  return { total: merged.filter(g => g.source === source).length, added };
+}
+
+// ── Get Steam ID from steamLoginSecure cookie ─────────────────────────────
+async function getSteamIdFromCookie() {
+  const urls = [
+    "https://store.steampowered.com",
+    "https://steamcommunity.com",
+  ];
+  for (const url of urls) {
+    try {
+      const cookie = await chrome.cookies.get({ url, name: "steamLoginSecure" });
+      if (cookie?.value) {
+        const steamId = decodeURIComponent(cookie.value).split("||")[0];
+        if (/^\d{17}$/.test(steamId)) return steamId;
+      }
+    } catch (e) { warn(`Could not read Steam cookie from ${url}`, e.message); }
+  }
+  return null;
 }
 
 // ── Shared request headers ────────────────────────────────────────────────
@@ -450,7 +471,7 @@ async function doScan(authFromPage, accountIdFromPage) {
       const titles = await method.fn();
       const games = [...new Set(titles)].filter(g => g && g.length > 1);
       info(`SUCCESS via ${method.name} — ${games.length} unique games`);
-      const { total, added } = await saveGames(games);
+      const { total, added } = await saveGames(games, "epic");
       return { games, total, added, method: method.name, logs: [...logs] };
     } catch (e) {
       error(`FAILED — ${method.name}: ${e.message}`);
@@ -459,6 +480,359 @@ async function doScan(authFromPage, accountIdFromPage) {
 
   error("All methods failed");
   throw { message: "All API methods failed — see Logs tab for details.", logs: [...logs] };
+}
+
+// ── Steam profile page DOM scraper ────────────────────────────────────────
+// Opens a background tab to the user's public profile games list and reads
+// all game names from the DOM — no rate limits, no API keys.
+// Returns string[] on success or null if profile is private / page unreadable.
+async function fetchNamesFromProfilePage(steamId) {
+  let bgTab = null;
+  try {
+    const url = `https://steamcommunity.com/profiles/${steamId}/games/?tab=all&sort=name`;
+    info("Profile page: opening", url);
+    bgTab = await chrome.tabs.create({ url, active: false });
+
+    // Wait for the page to fully load
+    await new Promise((resolve, reject) => {
+      const tid = setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(fn);
+        reject(new Error("profile tab load timeout"));
+      }, 20000);
+      function fn(tabId, changeInfo) {
+        if (tabId !== bgTab.id || changeInfo.status !== "complete") return;
+        chrome.tabs.onUpdated.removeListener(fn);
+        clearTimeout(tid);
+        resolve();
+      }
+      chrome.tabs.onUpdated.addListener(fn);
+    });
+
+    // Brief pause for any JS rendering after load event
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: bgTab.id },
+      world: "MAIN",
+      func: async () => {
+        // 1. Old Steam profile: g_rgGames global variable (server-injected JSON)
+        if (Array.isArray(window.g_rgGames) && window.g_rgGames.length > 0) {
+          return { names: window.g_rgGames.map(g => g.name || g.strName).filter(Boolean), via: "g_rgGames" };
+        }
+        // Also check inline <script> tags for the variable
+        for (const s of document.querySelectorAll("script")) {
+          const m = s.textContent?.match(/var\s+g_rgGames\s*=\s*(\[[\s\S]*?\]);/);
+          if (m) {
+            try {
+              const games = JSON.parse(m[1]);
+              const names = games.map(g => g.name || g.strName).filter(Boolean);
+              if (names.length > 0) return { names, via: "inline g_rgGames" };
+            } catch { /* malformed JSON */ }
+          }
+        }
+
+        // Bail out early if the page shows a "private profile" or error block
+        if (document.querySelector(".profile_private_info, .error_ctn")) {
+          return { names: null, via: "private-or-error" };
+        }
+
+        // 2. DOM scraping — handles both old server-rendered and new React-based layouts.
+        //    For React virtual lists scroll down until no new names appear.
+        const seen = new Set();
+        const collect = () => {
+          // New React UI (user-verified selector from desktop Steam web UI)
+          for (const a of document.querySelectorAll("div.Panel[role=button] span a")) {
+            const t = a.textContent?.trim();
+            if (t) seen.add(t);
+          }
+          // Old server-rendered profile page
+          for (const el of document.querySelectorAll("#games_list_rows .gameName, .gameListRow .gameName")) {
+            const t = el.textContent?.trim();
+            if (t) seen.add(t);
+          }
+        };
+
+        collect();
+        // Scroll until the set stops growing (handles React virtual-scroll lists)
+        let prev = -1;
+        while (seen.size !== prev) {
+          prev = seen.size;
+          window.scrollTo(0, document.body.scrollHeight);
+          await new Promise(r => setTimeout(r, 400));
+          collect();
+        }
+        return seen.size > 0
+          ? { names: [...seen], via: "dom" }
+          : { names: null, via: "dom-empty" };
+      },
+    });
+
+    const r = results?.[0]?.result;
+    info("Profile page result", `via=${r?.via ?? "none"} names=${r?.names?.length ?? 0}`);
+    return Array.isArray(r?.names) && r.names.length > 0 ? r.names : null;
+  } catch (e) {
+    warn("Profile page scan failed", e.message);
+    return null;
+  } finally {
+    if (bgTab) chrome.tabs.remove(bgTab.id).catch(() => {});
+  }
+}
+
+// ── Steam scan via store.steampowered.com ─────────────────────────────────
+// Step 1: dynamicstore/userdata/ → owned app IDs
+// Step 2a: ISteamApps/GetAppList from service worker (Valve may 404 extension origins)
+// Step 2b/2c: relay GetAppList through a Steam Store tab (page origin bypasses the block)
+// Step 2d: DOM scrape the user's Steam Community profile games page
+// Step 3: appdetails for any IDs not covered above (paced to avoid rate limiting)
+async function fetchSteamViaStoreApi(steamId) {
+  info("Step 1: store.steampowered.com/dynamicstore/userdata");
+  const udResp = await fetch("https://store.steampowered.com/dynamicstore/userdata/", {
+    credentials: "include",
+    headers: { "Accept": "application/json, */*" },
+  });
+  info("userdata HTTP status", udResp.status);
+  if (!udResp.ok) throw new Error(`userdata HTTP ${udResp.status}`);
+
+  const ud = await udResp.json();
+  const rawIds = ud?.rgOwnedApps;
+  if (!Array.isArray(rawIds) || rawIds.length === 0) {
+    throw new Error("rgOwnedApps missing or empty — store session may not be authenticated");
+  }
+  // Normalize to numbers — some Steam API variants return string IDs
+  const ownedIds = rawIds.map(Number).filter(n => n > 0);
+  info(`Owned app IDs: ${ownedIds.length}`);
+  const ownedSet = new Set(ownedIds);
+
+  // nameMap: appid (number) → name string — persists across all resolution steps
+  const nameMap = new Map();
+
+  // Step 2a: try GetAppList directly from the service worker
+  const appListUrls = [
+    "https://api.steampowered.com/ISteamApps/GetAppList/v0002/?format=json",
+    "https://api.steampowered.com/ISteamApps/GetAppList/v2/?format=json",
+    "https://api.steampowered.com/ISteamApps/GetAppList/v0001/?format=json",
+  ];
+  let getAppListWorked = false;
+  for (const url of appListUrls) {
+    try {
+      info("Step 2a: GetAppList", url);
+      const r = await fetch(url);
+      info("GetAppList HTTP status", r.status);
+      if (!r.ok) continue;
+      const json = await r.json();
+      const apps = json?.applist?.apps;
+      if (!Array.isArray(apps) || apps.length === 0) continue;
+      info(`GetAppList: ${apps.length} entries in catalog`);
+      for (const a of apps) {
+        const id = Number(a.appid);
+        if (ownedSet.has(id) && a.name?.trim()) nameMap.set(id, a.name.trim());
+      }
+      info(`GetAppList matched ${nameMap.size} of ${ownedSet.size} owned IDs`);
+      getAppListWorked = true;
+      break;
+    } catch (e) { warn("GetAppList attempt failed", e.message); }
+  }
+
+  // Step 2b/2c: relay GetAppList through a Steam Store page context.
+  // Scripts in MAIN world run with the page's origin; api.steampowered.com accepts that origin
+  // but returns 404 for Chrome-extension service-worker origins.
+  if (!getAppListWorked) {
+    const appListFuncInPage = async (ids) => {
+      const owned = new Set(ids.map(Number));
+      const urls = [
+        "https://api.steampowered.com/ISteamApps/GetAppList/v0002/?format=json",
+        "https://api.steampowered.com/ISteamApps/GetAppList/v2/?format=json",
+      ];
+      const diag = [];
+      for (const url of urls) {
+        const tag = url.includes("v0002") ? "v0002" : "v2";
+        try {
+          const r = await fetch(url);
+          diag.push(`${tag}=${r.status}`);
+          if (!r.ok) continue;
+          const json = await r.json();
+          // Steam changed response envelope in newer pagination API: response.apps instead of applist.apps
+          const apps = json?.applist?.apps ?? json?.response?.apps;
+          diag.push(`entries=${Array.isArray(apps) ? apps.length : "none"}`);
+          if (!Array.isArray(apps) || apps.length === 0) continue;
+          // Filter to owned IDs before returning to avoid transferring ~4 MB over the bridge
+          const matched = apps
+            .filter(a => owned.has(Number(a.appid)) && a.name?.trim())
+            .map(a => [Number(a.appid), a.name.trim()]);
+          return { games: matched, diag: diag.join(" | ") };
+        } catch (e) { diag.push(`${tag}=err:${e.message.slice(0, 40)}`); }
+      }
+      return { games: null, diag: diag.join(" | ") };
+    };
+
+    // 2b: use an already-open Steam Store tab if available (zero overhead)
+    let relayTabId = null;
+    const existingTabs = await chrome.tabs.query({ url: "https://store.steampowered.com/*" });
+    if (existingTabs.length > 0) {
+      relayTabId = existingTabs[0].id;
+      info(`Step 2b: relaying GetAppList via existing tab (id=${relayTabId})`);
+    }
+
+    // 2c: no tab open — create a silent background tab, use it, then close it
+    let bgTab = null;
+    if (relayTabId === null) {
+      info("Step 2c: opening temporary background Steam tab for GetAppList relay");
+      try {
+        bgTab = await chrome.tabs.create({ url: "https://store.steampowered.com/", active: false });
+        relayTabId = bgTab.id;
+        // Wait for the tab to finish loading (max 15 s)
+        await new Promise((resolve, reject) => {
+          const tid = setTimeout(() => {
+            chrome.tabs.onUpdated.removeListener(fn);
+            reject(new Error("tab load timeout"));
+          }, 15000);
+          function fn(tabId, changeInfo) {
+            if (tabId !== bgTab.id || changeInfo.status !== "complete") return;
+            chrome.tabs.onUpdated.removeListener(fn);
+            clearTimeout(tid);
+            resolve();
+          }
+          chrome.tabs.onUpdated.addListener(fn);
+        });
+        info("Background tab loaded");
+      } catch (e) {
+        warn("Background tab creation/load failed", e.message);
+        relayTabId = null;
+      }
+    }
+
+    if (relayTabId !== null) {
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: relayTabId },
+          world: "MAIN",
+          args: [ownedIds],
+          func: appListFuncInPage,
+        });
+        const relayResult = results?.[0]?.result;
+        if (relayResult?.diag) info("GetAppList page context diagnostic", relayResult.diag);
+        const pairs = relayResult?.games;
+        if (Array.isArray(pairs) && pairs.length > 0) {
+          for (const [id, name] of pairs) nameMap.set(id, name);
+          info(`GetAppList relay: matched ${nameMap.size} names`);
+          getAppListWorked = true;
+        } else {
+          info("GetAppList relay: no results from page context — falling back to appdetails");
+        }
+      } catch (e) {
+        warn("GetAppList relay script failed", e.message);
+      } finally {
+        if (bgTab) chrome.tabs.remove(bgTab.id).catch(() => {});
+      }
+    }
+  }
+
+  // Step 2d: DOM scrape the user's Steam Community profile games page.
+  // Completely bypasses the API rate-limit and 404 issues — the page lists all owned games.
+  // If it returns enough names we skip the slow appdetails loop entirely.
+  let profilePageNames = null;
+  if (!getAppListWorked) {
+    profilePageNames = await fetchNamesFromProfilePage(steamId);
+    if (profilePageNames && profilePageNames.length > 50) {
+      info(`Profile page: ${profilePageNames.length} names — skipping appdetails fallback`);
+      const combined = [...new Set([...nameMap.values(), ...profilePageNames])].filter(Boolean);
+      info(`Resolved ${combined.length} names from ${ownedSet.size} owned IDs`);
+      return combined.length > 0 ? combined : null;
+    }
+    if (profilePageNames) info(`Profile page returned only ${profilePageNames.length} names — continuing to appdetails`);
+  }
+
+  // Step 3: appdetails for any IDs still unresolved.
+  // Steam rate-limits around request ~300-450; strategy:
+  //   - 100 ms between batches (slows burst rate, helps early range)
+  //   - 20 s strategic pause every 300 requests (resets the sliding window)
+  //   - retry on explicit 429
+  const unresolvedIds = ownedIds.filter(id => !nameMap.has(id));
+  if (unresolvedIds.length > 0) {
+    info(`Step 3: appdetails for ${unresolvedIds.length} unresolved IDs`);
+    const PARALLEL = 15;
+    let i = 0;
+    while (i < unresolvedIds.length) {
+      const chunk = unresolvedIds.slice(i, i + PARALLEL);
+      const results = await Promise.all(chunk.map(async (appid) => {
+        try {
+          // cc=us ensures consistent results regardless of user's region for the name lookup
+          const r = await fetch(`https://store.steampowered.com/api/appdetails/?appids=${appid}&cc=us&l=english&filters=basic`);
+          if (r.status === 429) return "ratelimit";
+          if (!r.ok) return null;
+          const data = await r.json();
+          const d = data?.[String(appid)]?.data ?? data?.[appid]?.data;
+          if (!d?.name) return null;
+          const type = d.type ?? "game";
+          if (type === "tool" || type === "music" || type === "video" || type === "advertising") return null;
+          return { id: appid, name: d.name };
+        } catch { return null; }
+      }));
+
+      const rateLimitHits = results.filter(r => r === "ratelimit").length;
+      if (rateLimitHits > 0) {
+        info(`Rate limited (${rateLimitHits}/${chunk.length}) — pausing 20 s`);
+        await new Promise(resolve => setTimeout(resolve, 20000));
+        continue; // retry same batch
+      }
+
+      for (const r of results) { if (r && r !== "ratelimit") nameMap.set(r.id, r.name); }
+      i += PARALLEL;
+
+      // Every 300 requests, take a longer break to let Steam's rate-limit window reset.
+      // Poll storage every second during the pause to keep the service worker alive
+      // (Chrome MV3 may terminate idle workers; storage API calls extend the lifetime).
+      if (i > 0 && i % 300 === 0 && i < unresolvedIds.length) {
+        info(`Strategic pause at ${i}/${unresolvedIds.length} (${nameMap.size} names) — 20 s rate-limit reset`);
+        const pauseEnd = Date.now() + 20000;
+        while (Date.now() < pauseEnd) {
+          await chrome.storage.local.get(LIBRARY_KEY); // keeps SW alive during wait
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      } else if (i < unresolvedIds.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      if (i % 150 === 0 || i >= unresolvedIds.length) {
+        info(`appdetails progress: ${nameMap.size} total names (checked ${Math.min(i, unresolvedIds.length)}/${unresolvedIds.length})`);
+      }
+    }
+  }
+
+  const names = [...new Set([...nameMap.values(), ...(profilePageNames || [])])].filter(Boolean);
+  info(`Resolved ${names.length} names from ${ownedSet.size} owned IDs`);
+  return names.length > 0 ? names : null;
+}
+
+// ── Steam scan ────────────────────────────────────────────────────────────
+async function doSteamScan() {
+  logs.length = 0;
+  const { epicDebugLogs } = await chrome.storage.local.get("epicDebugLogs");
+  DEBUG = !!epicDebugLogs;
+  info(`ELS v${VERSION} Steam scan started`);
+
+  const steamId = await getSteamIdFromCookie();
+  if (!steamId) throw { message: "Not logged into Steam in Chrome — open store.steampowered.com and sign in.", logs: [...logs] };
+  info(`Steam ID found`, steamId.slice(0, 8) + "...");
+
+  let names = null;
+  try {
+    names = await fetchSteamViaStoreApi(steamId);
+  } catch (e) {
+    if (e.logs) throw e;
+    error("Store API method failed", e.message);
+    throw {
+      message: `Steam scan failed: ${e.message}. Make sure you are signed into store.steampowered.com in Chrome.`,
+      logs: [...logs],
+    };
+  }
+
+  if (!names || names.length === 0) {
+    throw { message: "Steam scan found 0 games — no games returned from Steam Store API.", logs: [...logs] };
+  }
+
+  const { total, added } = await saveGames(names, "steam");
+  return { success: true, games: names, total, added, method: "Steam Store API", logs: [...logs] };
 }
 
 // ── Message listener ──────────────────────────────────────────────────────
@@ -474,15 +848,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true; // async
   }
 
-  if (msg.action === "getStats") {
-    chrome.storage.local.get([STORAGE_KEY, "epicLastScan"], result => {
-      sendResponse({ count: result[STORAGE_KEY]?.length || 0, lastScan: result.epicLastScan || null });
-    });
+  if (msg.action === "doSteamScan") {
+    doSteamScan()
+      .then(result => sendResponse({ success: true, ...result }))
+      .catch(err => sendResponse({ success: false, error: err.message || String(err), logs: err.logs || logs }));
     return true;
   }
 
   if (msg.action === "checkAuth") {
     getEpicAuthFromCookies().then(token => sendResponse({ hasAuth: !!token }));
+    return true;
+  }
+
+  if (msg.action === "checkSteamAuth") {
+    getSteamIdFromCookie().then(id => sendResponse({ hasAuth: !!id }));
     return true;
   }
 });

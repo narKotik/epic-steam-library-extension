@@ -1,4 +1,4 @@
-// content_epic.js v1.3.8
+// content_epic.js v1.4.0
 // Runs on epicgames.com pages.
 // Its ONLY job: extract auth tokens/account ID from the page and send to background.
 // All network calls happen in background.js (no CORS there).
@@ -133,5 +133,168 @@
     }
   });
 
-  console.log("[ELS] v1.3.8 content script ready on", location.hostname);
+  console.log("[ELS] v1.4.0 content script ready on", location.hostname);
+
+  // ── Badge on Epic store game pages ────────────────────────────────────────
+  // Shows when you own the game on Steam or Other (so you don't double-buy on Epic)
+  const ELS_LIBRARY_KEY   = "elsLibrary";
+  const ELS_DISMISSED_KEY = "epicDismissedMatches";
+
+  function elsNormalize(title) {
+    return title.toLowerCase().replace(/[™®©]/g, "").replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+  }
+  function elsSigWords(s) { return s.split(" ").filter(w => w.length > 2 || /^\d+$/.test(w)); }
+  function elsIsMatch(pageTitle, libraryTitles) {
+    const sn = elsNormalize(pageTitle);
+    const sWords = new Set(elsSigWords(sn));
+    const RANK = { exact: 3, partial: 2, fuzzy: 1 };
+    let best = null;
+    for (const lt of libraryTitles) {
+      const en = elsNormalize(lt);
+      let confidence = null;
+      if (sn === en) { confidence = "exact"; }
+      else if (sn.includes(en) || en.includes(sn)) { confidence = "partial"; }
+      else {
+        const eWords = elsSigWords(en);
+        if (eWords.length > 0) {
+          const overlap = eWords.filter(w => sWords.has(w)).length;
+          if (overlap / Math.max(sWords.size, eWords.length) >= 0.75) confidence = "fuzzy";
+        }
+      }
+      if (confidence && (!best || RANK[confidence] > RANK[best.confidence] ||
+          (confidence === best.confidence && en.length > elsNormalize(best.matchedTitle).length))) {
+        best = { match: true, matchedTitle: lt, confidence };
+        if (confidence === "exact") break;
+      }
+    }
+    return best || { match: false };
+  }
+
+  function getEpicGameTitle() {
+    return (
+      document.querySelector('[data-component="PDPTitleHeader"] h1')?.innerText?.trim() ||
+      document.querySelector('h1[data-testid="title"]')?.innerText?.trim() ||
+      document.querySelector('.css-1gty6cv h1')?.innerText?.trim() ||
+      document.querySelector('h1')?.innerText?.trim() ||
+      document.title?.split(" - ")[0]?.trim()
+    );
+  }
+
+  function getEpicSlug() {
+    return location.pathname.match(/\/p\/([^/?#]+)/i)?.[1]?.toLowerCase() || null;
+  }
+
+  function injectEpicBadge(slug, pageTitle, matchedTitle, matchedSource, confidence) {
+    if (document.getElementById("els-epic-badge")) return;
+
+    // Prefer a narrow element inside the purchase panel so the badge sits flush
+    // above the price/CTA row rather than floating above the whole sidebar.
+    const buyArea =
+      document.querySelector('[data-component="OfferDetail"]') ||
+      document.querySelector('[data-testid="purchase-cta-section"]') ||
+      document.querySelector('aside') ||
+      document.querySelector('.css-1myjdqe');
+    if (!buyArea) return;
+
+    const sourceLabel = matchedSource === "steam" ? "Steam" : "your library";
+    const sourceColor = matchedSource === "steam" ? "#67c1f5" : "#6e7681";
+    const confidenceLabel = confidence === "exact" ? "Exact match" : confidence === "partial" ? "Title match" : "Likely match";
+    const confidenceColor = confidence === "exact" ? "#00c853" : confidence === "partial" ? "#00b0ff" : "#ff9800";
+
+    const badge = document.createElement("div");
+    badge.id = "els-epic-badge";
+    badge.innerHTML = `
+      <div id="els-epic-badge-inner">
+        <div id="els-epic-badge-icon">🎮</div>
+        <div id="els-epic-badge-text">
+          <span id="els-epic-badge-title">You already own this on <span style="color:${sourceColor}">${sourceLabel}</span>!</span>
+          <span id="els-epic-badge-sub">"${matchedTitle.replace(/"/g, "&quot;")}" · <span style="color:${confidenceColor}">${confidenceLabel}</span></span>
+        </div>
+        <div id="els-epic-badge-close" title="Dismiss">✕</div>
+      </div>`;
+
+    const style = document.createElement("style");
+    style.textContent = `
+      #els-epic-badge { margin:12px 0; animation:elsBadgeIn2 .4s cubic-bezier(.175,.885,.32,1.275) both; }
+      @keyframes elsBadgeIn2 { from{opacity:0;transform:scale(.92) translateY(-6px)} to{opacity:1;transform:scale(1) translateY(0)} }
+      #els-epic-badge-inner { display:flex; align-items:center; gap:12px; background:linear-gradient(135deg,#0d1b2a,#1a2d45);
+        border:1px solid #30363d; border-left:4px solid ${sourceColor}; border-radius:8px; padding:12px 16px;
+        box-shadow:0 2px 16px rgba(0,0,0,.3); }
+      #els-epic-badge-icon { font-size:24px; flex-shrink:0; }
+      #els-epic-badge-text { flex:1; display:flex; flex-direction:column; gap:3px; }
+      #els-epic-badge-title { color:#fff; font-size:14px; font-weight:700; font-family:'Segoe UI',sans-serif; }
+      #els-epic-badge-sub { color:#8ba3be; font-size:11px; font-family:'Segoe UI',sans-serif; }
+      #els-epic-badge-close { color:#4a6580; font-size:12px; cursor:pointer; padding:4px; border-radius:4px;
+        flex-shrink:0; transition:color .2s,background .2s; line-height:1; }
+      #els-epic-badge-close:hover { color:#fff; background:rgba(255,255,255,.1); }`;
+    document.head.appendChild(style);
+
+    badge.querySelector("#els-epic-badge-close").addEventListener("click", () => {
+      if (slug) {
+        chrome.storage.local.get(ELS_DISMISSED_KEY, (r) => {
+          const list = r[ELS_DISMISSED_KEY] || [];
+          if (!list.some(d => d.pageId === slug && d.matchedTitle === matchedTitle)) {
+            list.push({ pageId: slug, pageStore: "epic", pageTitle: pageTitle, matchedTitle });
+            chrome.storage.local.set({ [ELS_DISMISSED_KEY]: list });
+          }
+        });
+      }
+      badge.style.transition = "opacity .3s,transform .3s";
+      badge.style.opacity = "0"; badge.style.transform = "scale(.95)";
+      setTimeout(() => badge.remove(), 300);
+    });
+
+    // "afterbegin" inserts as first child *inside* the panel, so the badge
+    // stays adjacent to the price/buy button instead of floating above the sidebar.
+    // The aside has a single content wrapper as its first child; all price/CTA elements
+    // live inside that wrapper. Walk up from the buy button to find which direct child
+    // of that wrapper is the CTA block, then insert before the price row above it.
+    const ctaBtn = buyArea.querySelector('[data-testid="purchase-cta-button"]');
+    if (ctaBtn) {
+      const sidebarContent = buyArea.firstElementChild ?? buyArea;
+      let ctaBlock = ctaBtn.parentElement;
+      while (ctaBlock && ctaBlock.parentElement !== sidebarContent) {
+        ctaBlock = ctaBlock.parentElement;
+      }
+      if (ctaBlock) {
+        // previousElementSibling is the price row — badge lands right above price+CTA
+        const anchor = ctaBlock.previousElementSibling ?? ctaBlock;
+        anchor.insertAdjacentElement("beforebegin", badge);
+      } else {
+        sidebarContent.insertAdjacentElement("afterbegin", badge);
+      }
+    } else {
+      (buyArea.firstElementChild ?? buyArea).insertAdjacentElement("afterbegin", badge);
+    }
+  }
+
+  function runEpicBadge() {
+    if (!/\/p\//i.test(location.pathname)) return; // only on game pages
+    const slug = getEpicSlug();
+    chrome.storage.local.get([ELS_LIBRARY_KEY, ELS_DISMISSED_KEY], (result) => {
+      const library = result[ELS_LIBRARY_KEY] || [];
+      // On Epic pages show badge only for steam + other sources
+      const entries = library.filter(g => g.source === "steam" || g.source === "other");
+      if (entries.length === 0) return;
+
+      const dismissed = result[ELS_DISMISSED_KEY] || [];
+      const dismissedTitles = new Set(
+        dismissed.filter(d => d.pageId === slug && d.pageStore === "epic").map(d => d.matchedTitle)
+      );
+      const candidates = entries.filter(g => !dismissedTitles.has(g.title));
+      if (candidates.length === 0) return;
+
+      const pageTitle = getEpicGameTitle();
+      if (!pageTitle) return;
+
+      const { match, matchedTitle, confidence } = elsIsMatch(pageTitle, candidates.map(g => g.title));
+      if (match) {
+        const matchedSource = candidates.find(g => g.title === matchedTitle)?.source || "other";
+        injectEpicBadge(slug, pageTitle, matchedTitle, matchedSource, confidence);
+      }
+    });
+  }
+
+  if (document.readyState === "complete") { runEpicBadge(); }
+  else { window.addEventListener("load", runEpicBadge); }
 })();

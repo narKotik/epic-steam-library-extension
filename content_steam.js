@@ -4,7 +4,7 @@
 (function () {
   "use strict";
 
-  const STORAGE_KEY   = "epicOwnedGames";
+  const LIBRARY_KEY   = "elsLibrary";
   const DISMISSED_KEY = "epicDismissedMatches";
 
   function escHtml(str) {
@@ -181,8 +181,8 @@
       if (appId) {
         chrome.storage.local.get(DISMISSED_KEY, (r) => {
           const list = r[DISMISSED_KEY] || [];
-          if (!list.some(d => d.appId === appId)) {
-            list.push({ appId, steamTitle, epicTitle });
+          if (!list.some(d => (d.pageId ?? d.appId) === appId && (d.matchedTitle ?? d.epicTitle) === epicTitle)) {
+            list.push({ pageId: appId, pageStore: "steam", pageTitle: steamTitle, matchedTitle: epicTitle });
             chrome.storage.local.set({ [DISMISSED_KEY]: list });
           }
         });
@@ -199,16 +199,17 @@
   // ── Main: load library and check current game ─────────────────────────────
   function run() {
     const appId = location.pathname.match(/\/app\/(\d+)/)?.[1] || null;
-    chrome.storage.local.get([STORAGE_KEY, DISMISSED_KEY], (result) => {
-      const epicGames = result[STORAGE_KEY];
-      if (!epicGames || epicGames.length === 0) return;
+    chrome.storage.local.get([LIBRARY_KEY, DISMISSED_KEY], (result) => {
+      const library = result[LIBRARY_KEY] || [];
+      // On Steam pages show badge only for epic + other sources (Steam already shows Steam ownership)
+      const candidates0 = library.filter(g => g.source === "epic" || g.source === "other").map(g => g.title);
+      if (candidates0.length === 0) return;
 
       const dismissed = result[DISMISSED_KEY] || [];
-      // Exclude only the specific Epic titles dismissed for this page
       const dismissedTitles = new Set(
-        dismissed.filter(d => d.appId === appId).map(d => d.epicTitle)
+        dismissed.filter(d => (d.pageId ?? d.appId) === appId).map(d => d.matchedTitle ?? d.epicTitle)
       );
-      const candidates = epicGames.filter(g => !dismissedTitles.has(g));
+      const candidates = candidates0.filter(t => !dismissedTitles.has(t));
       if (candidates.length === 0) return;
 
       const steamTitle = getSteamTitle();
