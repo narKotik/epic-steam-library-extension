@@ -3,7 +3,7 @@
 // The content script just grabs auth tokens from the page and sends them here.
 
 const STORAGE_KEY = "epicOwnedGames";
-const VERSION = "1.3.7";
+const VERSION = "1.3.8";
 let DEBUG = false; // set true (or via Debug logs checkbox in popup) to enable full title-list dumps
 
 // ── Logger ────────────────────────────────────────────────────────────────
@@ -43,18 +43,22 @@ async function getEpicAuthFromCookies() {
     { url: "https://www.epicgames.com",   name: "epic_access_token" },
   ];
 
-  // A real auth token is either an EG1~ JWT (2000+ chars) or at least 100 chars.
-  // Short values like EPIC_BEARER_TOKEN (32 chars) are session IDs, not bearer tokens.
-  const isRealToken = v => v && (v.toLowerCase().startsWith("eg1~") || v.length >= 100);
+  // Real auth tokens are either EG1~<base64> or a raw JWT (header.payload.sig, each segment
+  // substantial base64url). Tracking/session/analytics cookies won't match either pattern.
+  const looksLikeToken = v => {
+    if (!v) return false;
+    if (v.toLowerCase().startsWith("eg1~")) return true;
+    return /^[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}$/.test(v);
+  };
 
   for (const { url, name } of cookieDomains) {
     try {
       const cookie = await chrome.cookies.get({ url, name });
-      if (isRealToken(cookie?.value)) {
+      if (looksLikeToken(cookie?.value)) {
         info(`Found auth cookie: ${name} (${cookie.value.length} chars)`);
         return cookie.value;
       } else if (cookie?.value) {
-        info(`Skipping short cookie: ${name} (${cookie.value.length} chars — not a token)`);
+        info(`Skipping non-token cookie: ${name} (${cookie.value.length} chars)`);
       }
     } catch (e) {
       warn(`Cookie read failed for ${name}`, e.message);
@@ -63,21 +67,11 @@ async function getEpicAuthFromCookies() {
 
   try {
     const all = await chrome.cookies.getAll({ domain: ".epicgames.com" });
-
-    // Epic's current token format: value starts with "EG1~" (case-insensitive)
-    const eg1Cookie = all.find(c => c.value?.toLowerCase().startsWith("eg1~"));
-    if (eg1Cookie) {
-      info(`Found EG1 token in cookie: ${eg1Cookie.name}`);
-      return eg1Cookie.value;
+    const tokenCookie = all.find(c => !c.name.startsWith("_") && looksLikeToken(c.value));
+    if (tokenCookie) {
+      info(`Found token in cookie: ${tokenCookie.name} (${tokenCookie.value.length} chars)`);
+      return tokenCookie.value;
     }
-
-    // Any long-value cookie (>100 chars) that looks like a JWT
-    const longCookie = all.find(c => (c.value?.length || 0) > 100 && !c.name.startsWith("_"));
-    if (longCookie) {
-      info(`Using long-value cookie as token: ${longCookie.name}`);
-      return longCookie.value;
-    }
-
     info(`No valid auth token found in cookies. Sign in at store.epicgames.com in Chrome.`);
   } catch (e) {
     warn("Could not list cookies", e.message);

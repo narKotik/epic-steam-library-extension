@@ -387,8 +387,8 @@ chrome.runtime.sendMessage({ action: "checkAuth" }, (r) => setAuthState(!!r?.has
 btnScan.addEventListener("click", () => {
   if (!hasAuth) {
     chrome.tabs.create({ url: "https://store.epicgames.com" });
-    setStatus("Sign in to Epic, then click Scan.", "warn");
-    setAuthState(true);
+    setStatus("Sign in to Epic, then reopen this popup and click Scan.", "warn");
+    scanDesc.textContent = "Sign in to Epic in the tab that just opened, then come back here and click Scan.";
     return;
   }
 
